@@ -1,0 +1,31 @@
+text,label,language,source
+"Dear customer, your bank account will be blocked today. Complete KYC now and share the OTP sent to your mobile to avoid suspension.",1,English,regression
+Your order has been delivered. Thank you for shopping with us. Rate your experience.,0,English,regression
+మీ ఖాతా ఈ రోజు బ్లాక్ చేయబడుతుంది. KYC పూర్తి చేయడానికి మీకు వచ్చిన OTP ని పంపండి.,1,Telugu,regression
+"మీ ఖాతా నుండి రూ. 500 డెబిట్ అయ్యింది. బ్యాలెన్స్ రూ. 12,340.",0,Telugu,regression
+आपका खाता आज बंद हो जाएगा। KYC के लिए आया हुआ OTP तुरंत बताएं।,1,Hindi,regression
+आपका पार्सल डिलीवर हो गया है। धन्यवाद।,0,Hindi,regression
+"Congratulations! Your cashback refund of Rs.4,999 is pending. Claim within 2 hours at https://bit.ly/refund-claim99 or it will expire.",1,English,new
+Electricity bill overdue. Your power connection will be disconnected tonight at 9 PM. Pay immediately: https://pay-bill-fast.xyz or call 8899776655,1,English,new
+Your parcel is held at customs. Pay clearance fee Rs.249 to release: https://tinyurl.com/parcel-fee-in,1,English,new
+"Work from home job: earn Rs.3,000 daily liking videos. No experience needed. Message us on Telegram to start today.",1,English,new
+482913 is your OTP for login. Do not share this OTP with anyone. Bank never asks for OTP. Valid for 10 minutes.,0,English,new
+"UPI: Rs.2,500 credited to your account from RAMESH K on 25-Oct. UPI Ref 429817365501. Balance Rs.18,204.",0,English,new
+"PNR 8642091357: Train 12728 Godavari Exp, 26-Oct, HYD to BZA, Seat B4-32 confirmed. Chart prepared.",0,English,new
+Reminder: Your appointment with Dr. Rao is tomorrow at 11:30 AM at City Hospital. Reply C to confirm.,0,English,new
+"మీ బ్యాంక్ ఖాతా నుంచి రూ. 70,000 డెబిట్ అయ్యాయి. ఈ లావాదేవీ మీరు చేయకపోతే వెంటనే NO అని రిప్లై ఇవ్వండి.",1,Telugu,new
+"అభినందనలు! మీరు రూ. 25,00,000 లాటరీ గెలుచుకున్నారు. డబ్బు పొందడానికి ఈ లింక్ నొక్కండి https://bit.ly/win-te25",1,Telugu,new
+మీ ఖాతా KYC అప్డేట్ చేయకపోతే రేపటి నుంచి వాడలేరు. వెంటనే ఇక్కడ అప్డేట్ చేయండి https://tinyurl.com/kyc-te-update,1,Telugu,new
+"మీకు రూ. 5,00,000 లోన్ ఆమోదం లభించింది. ప్రాసెసింగ్ ఫీజు రూ. 2,999 ముందుగా చెల్లించండి, లోన్ అకౌంటులో పడుతుంది.",1,Telugu,new
+"మీ ఖాతా నం. XX4821 నుండి రూ. 1,250 డెబిట్ అయ్యింది. అందుబాటులో ఉన్న బ్యాలెన్స్ రూ. 9,430. ఈ లావాదేవీ మీరు చేయకపోతే బ్యాంక్ నంబర్ కు కాల్ చేయండి.",0,Telugu,new
+మీ లాగిన్ కోసం OTP 731905. ఈ OTP ని ఎవరితోనూ పంచుకోవద్దు. బ్యాంక్ ఎప్పుడూ OTP అడగదు.,0,Telugu,new
+మీ పార్శిల్ ఈ రోజు డెలివరీకి బయలుదేరింది. డెలివరీ సమయం సాయంత్రం 5 గంటల లోపు. ధన్యవాదాలు.,0,Telugu,new
+మీ విద్యుత్ బిల్లు రూ. 864 చెల్లించబడింది. రసీదు నం. 582741. ధన్యవాదాలు.,0,Telugu,new
+"आपके खाते से ₹45,000 डेबिट हुआ है। अगर यह आपने नहीं किया तो तुरंत इस नंबर पर कॉल करें 9812345670 और OTP बताएं",1,Hindi,new
+"आयकर विभाग: आपका रिफंड ₹18,750 स्वीकृत हुआ है। राशि पाने के लिए अपने खाते की जानकारी यहाँ भरें https://refund-it-gov.xyz",1,Hindi,new
+"प्रधानमंत्री योजना में आपका चयन हुआ है। ₹50,000 अनुदान पाने के लिए ₹499 पंजीकरण शुल्क भेजें।",1,Hindi,new
+आपका सिम 24 घंटे में बंद हो जाएगा। KYC सत्यापन के लिए आया OTP तुरंत साझा करें।,1,Hindi,new
+"आपके खाते में ₹32,000 वेतन क्रेडिट हुआ है। शेष राशि ₹41,208। यह संदेश केवल सूचना के लिए है।",0,Hindi,new
+आपका OTP 560218 है। कृपया यह OTP किसी के साथ साझा न करें। बैंक कभी OTP नहीं मांगता।,0,Hindi,new
+"आपकी गैस बुकिंग सफल हुई। बुकिंग नं. 771209, डिलीवरी 3 दिनों में होगी। धन्यवाद।",0,Hindi,new
+आपका पार्सल आज डिलीवर कर दिया गया है। ऑर्डर नं. 903412। खरीदारी के लिए धन्यवाद।,0,Hindi,new

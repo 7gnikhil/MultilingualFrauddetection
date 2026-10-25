@@ -1,0 +1,52 @@
+{
+  "preprocess_version": "v3-indicnorm+struct+cgrid",
+  "encoder": "google/muril-base-cased",
+  "max_len": 128,
+  "thresholds": {
+    "English": 0.4600000000000001,
+    "Hindi": 0.33,
+    "Telugu": 0.39000000000000007
+  },
+  "head_source": {
+    "English": "own_struct",
+    "Hindi": "own_emb",
+    "Telugu": "own_emb"
+  },
+  "struct_feature_names": [
+    "n_chars",
+    "n_words",
+    "digit_ratio",
+    "n_digit_runs",
+    "max_run_len",
+    "has_long_digit_run",
+    "has_phone",
+    "has_url",
+    "n_urls",
+    "url_is_shortener",
+    "url_has_ip",
+    "has_email",
+    "has_upi",
+    "has_currency",
+    "amount_log10",
+    "has_amount",
+    "mentions_otp",
+    "otp_word_near_digits",
+    "otp_is_requested",
+    "mentions_do_not_share",
+    "mentions_never_ask",
+    "mentions_debit",
+    "mentions_credit",
+    "mentions_blocked",
+    "mentions_kyc",
+    "mentions_prize",
+    "mentions_click",
+    "exclaim_count",
+    "question_count",
+    "caps_ratio"
+  ],
+  "labels": {
+    "0": "ham",
+    "1": "fraud"
+  },
+  "extension_ready": false
+}
