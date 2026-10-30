@@ -57,16 +57,22 @@
 .fd-result.show { display: block; }
 .fd-result.fraud  { background: #fef2f2; border: 1px solid #fecaca; }
 .fd-result.likely { background: #fffbeb; border: 1px solid #fde68a; }
+.fd-result.uncertain { background: #fffbeb; border: 1px solid #f59e0b; }
+.fd-result.unavailable { background: #f1f5f9; border: 1px solid #94a3b8; }
 .fd-result.safe   { background: #f0fdf4; border: 1px solid #bbf7d0; }
 .fd-verdict { font-size: 16px; font-weight: 700; }
 .fd-result.fraud .fd-verdict  { color: #b91c1c; }
 .fd-result.likely .fd-verdict { color: #b45309; }
+.fd-result.uncertain .fd-verdict { color: #92400e; }
+.fd-result.unavailable .fd-verdict { color: #334155; }
 .fd-result.safe .fd-verdict   { color: #15803d; }
 .fd-bar { height: 8px; border-radius: 99px; background: rgba(15,23,42,.12);
   overflow: hidden; margin: 8px 0 6px; }
 .fd-bar > div { height: 100%; border-radius: 99px; transition: width .4s ease; }
 .fd-result.fraud .fd-bar > div  { background: #dc2626; }
 .fd-result.likely .fd-bar > div { background: #f59e0b; }
+.fd-result.uncertain .fd-bar > div { background: #f59e0b; }
+.fd-result.unavailable .fd-bar > div { background: #64748b; }
 .fd-result.safe .fd-bar > div   { background: #22c55e; }
 .fd-meta { font-size: 12px; color: #475569; line-height: 1.5; }
 .fd-reasons { font-size: 12px; color: #475569; margin-top: 4px; }
@@ -75,7 +81,19 @@
   font-size: 10px; font-weight: 700; border-radius: 99px; padding: 1px 7px; margin-left: 6px;
   vertical-align: middle;
 }
-.fd-privacy { font-size: 11px; color: #94a3b8; margin-top: 10px; text-align: center; }
+.fd-privacy { font-size: 11px; color: #94a3b8; margin-top: 10px; text-align: center }
+
+.fd-feedback {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 9px;
+  font-size: 12px; color: #475569;
+}
+.fd-fb-btn {
+  border: 1px solid #cbd5e1; background: #fff; color: #0f172a; border-radius: 99px;
+  padding: 4px 10px; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.fd-fb-btn:hover { border-color: #1d4ed8; color: #1d4ed8; }
+.fd-fb-btn:disabled { opacity: .5; cursor: wait; }
+.fd-learn-note { font-size: 12px; color: #0f766e; margin-top: 5px; min-height: 0; }
 
 #fd-bubble {
   position: fixed; z-index: 2147483647; display: none; cursor: pointer;

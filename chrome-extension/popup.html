@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <style>
-  body { width: 300px; margin: 0; font-family: system-ui, sans-serif; color: #0f172a; }
+  body { width: 320px; margin: 0; font-family: system-ui, sans-serif; color: #0f172a; }
   .head { background: linear-gradient(135deg,#1d4ed8,#0ea5e9); color:#fff; padding:14px; }
   .head b { font-size:16px; } .head small { display:block; opacity:.9; margin-top:2px; }
   .body { padding:12px 14px 14px; font-size:13px; line-height:1.55; }
@@ -11,14 +11,31 @@
     padding:10px; font-size:14px; font-weight:600; cursor:pointer; }
   button:hover { background:#1e40af; }
   ul { margin:10px 0 0; padding-left:18px; color:#334155; }
-  .badge { display:inline-block; background:#fef3c7; color:#92400e; border:1px solid #fde68a;
+  .badge { display:inline-block; background:#dcfce7; color:#166534; border:1px solid #bbf7d0;
     font-size:10px; font-weight:700; border-radius:99px; padding:1px 7px; }
-  .priv { color:#94a3b8; font-size:11px; margin-top:10px; text-align:center; }
+  .priv { color:#64748b; font-size:11px; margin-top:10px; }
+  .section { margin-top:12px; border-top:1px solid #e2e8f0; padding-top:10px; }
+  .section b { font-size:13px; }
+  .section p { margin:6px 0; color:#334155; font-size:12px; }
+  .row { display:flex; gap:8px; margin-top:8px; }
+  .row button { flex:1; padding:8px; font-size:12px; background:#0f766e; }
+  .row button:hover { background:#115e59; }
+  .row button.ghost { background:#fff; color:#b91c1c; border:1px solid #fecaca; }
+  .row button.ghost:hover { background:#fef2f2; }
+  .row button.secondary { background:#334155; }
+  .row button.secondary:hover { background:#1e293b; }
+  button:disabled { opacity:.5; cursor:default; }
+  label.consent { display:flex; gap:8px; align-items:flex-start; font-size:12px; font-weight:600; color:#0f172a; }
+  label.consent input { margin-top:3px; }
+  input[type="url"] { width:100%; box-sizing:border-box; border:1px solid #cbd5e1; border-radius:8px;
+    padding:8px; font-size:12px; margin-top:6px; color:#0f172a; }
+  .status { min-height:16px; font-size:11px; color:#0f766e; margin-top:6px; }
+  .muted { color:#64748b; font-size:11px; }
 </style>
 </head>
 <body>
   <div class="head"><b>🛡️ Fraud Detector</b>
-    <small>Telugu · Hindi · English</small></div>
+    <small>Telugu · Hindi · English · v1.2.0</small></div>
   <div class="body">
     <button id="toggle">Show / hide the on-screen button panel</button>
     <ul>
@@ -27,10 +44,59 @@
       <li><b>Right-click</b> selected text → “Check with Fraud Detector”</li>
       <li>Drag the 🛡️ button anywhere — it stays on screen</li>
     </ul>
-    <p>Model status: <span class="badge" style="background:#dcfce7;color:#166534;border-color:#bbf7d0;">TRAINED MODEL · ON-DEVICE</span><br>
-    Your trained Telugu / Hindi / English model (MuRIL + per-language
-    heads) runs locally in this extension. Nothing is uploaded.</p>
-    <div class="priv">🔒 Runs 100% locally. No message ever leaves your browser.</div>
+    <p>Model status: <span class="badge">TRAINED MODEL · ON-DEVICE</span><br>
+    Inference always runs locally. If the model cannot load, the panel
+    shows <b>MODEL UNAVAILABLE</b> instead of guessing.</p>
+
+    <div class="section">
+      <b>🧠 Personal learning</b>
+      <p>Verdict wrong? In the panel, tap <b>“It's fraud”</b> or
+      <b>“It's safe”</b> — the local model adjusts instantly.
+      Corrections so far: <b id="learn-count">…</b></p>
+      <div class="row">
+        <button id="export">Export corrections (CSV)</button>
+        <button id="reset" class="ghost">Reset learning</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <b>🌐 Improve the shared model (optional)</b>
+      <label class="consent" for="share-corrections">
+        <input type="checkbox" id="share-corrections">
+        <span>Share anonymized corrections to improve the model</span>
+      </label>
+      <p><b>Default: OFF.</b> Nothing is uploaded unless this is ON
+      <i>and</i> you click a correction button. Before upload, the same
+      anonymizer used by the model replaces URLs, emails, UPI IDs,
+      account numbers, phone numbers, and OTP-like digits with placeholders.
+      Raw messages are never queued or sent.</p>
+      <label class="muted" for="api-base">Feedback / model-update API base URL</label>
+      <input type="url" id="api-base" spellcheck="false"
+             value="https://YOUR-BACKEND.vercel.app">
+      <div class="row">
+        <button id="save-api" class="secondary">Save API settings</button>
+        <button id="sync-now" class="secondary">Sync now</button>
+      </div>
+      <p>Queued anonymized corrections: <b id="queue-count">0</b>.
+      Failed uploads stay queued and retry with backoff.</p>
+      <div class="status" id="settings-status"></div>
+    </div>
+
+    <div class="section">
+      <b>⬆️ Model config updates</b>
+      <p>Active config: <b id="model-version">…</b><br>
+      <span id="model-status">Not checked yet.</span></p>
+      <div class="row">
+        <button id="check-model" class="secondary">Check</button>
+        <button id="apply-model" class="secondary" disabled>Apply staged</button>
+        <button id="rollback-model" class="ghost" disabled>Rollback</button>
+      </div>
+      <p class="muted">Updates download and validate a small config.json
+      only. The 239&nbsp;MB ONNX encoder is never replaced automatically,
+      and the previous config is kept for rollback.</p>
+    </div>
+
+    <div class="priv">🔒 Local inference · sharing is opt-in and anonymized.</div>
   </div>
   <script src="popup.js"></script>
 </body>
