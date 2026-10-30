@@ -1,0 +1,4 @@
+# Trained encoder (239MB) exceeds GitHub's 100MB file limit.
+# It is distributed as a Release asset — see model/GET_MODEL.md
+model/model.onnx
+*.zip
