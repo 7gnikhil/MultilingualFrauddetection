@@ -14,6 +14,15 @@
   .badge { display:inline-block; background:#fef3c7; color:#92400e; border:1px solid #fde68a;
     font-size:10px; font-weight:700; border-radius:99px; padding:1px 7px; }
   .priv { color:#94a3b8; font-size:11px; margin-top:10px; text-align:center; }
+  .learn { margin-top:12px; border-top:1px solid #e2e8f0; padding-top:10px; }
+  .learn b { font-size:13px; }
+  .learn p { margin:6px 0; color:#334155; font-size:12px; }
+  .row { display:flex; gap:8px; margin-top:8px; }
+  .row button { flex:1; padding:8px; font-size:12px; background:#0f766e; }
+  .row button:hover { background:#115e59; }
+  .row button.ghost { background:#fff; color:#b91c1c; border:1px solid #fecaca; }
+  .row button.ghost:hover { background:#fef2f2; }
+  button:disabled { opacity:.5; cursor:default; }
 </style>
 </head>
 <body>
@@ -30,6 +39,16 @@
     <p>Model status: <span class="badge" style="background:#dcfce7;color:#166534;border-color:#bbf7d0;">TRAINED MODEL · ON-DEVICE</span><br>
     Your trained Telugu / Hindi / English model (MuRIL + per-language
     heads) runs locally in this extension. Nothing is uploaded.</p>
+    <div class="learn">
+      <b>🧠 Personal learning</b>
+      <p>Verdict wrong? In the panel, tap <b>“It's fraud”</b> or
+      <b>“It's safe”</b> under the result — the model adjusts instantly,
+      on this device only. Corrections so far: <b id="learn-count">…</b></p>
+      <div class="row">
+        <button id="export">Export corrections (CSV)</button>
+        <button id="reset" class="ghost">Reset learning</button>
+      </div>
+    </div>
     <div class="priv">🔒 Runs 100% locally. No message ever leaves your browser.</div>
   </div>
   <script src="popup.js"></script>

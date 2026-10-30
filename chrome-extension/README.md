@@ -106,3 +106,30 @@ Hindi 0.94, Telugu 0.86.
 
 Note: the floating button cannot appear on `chrome://` internal pages or
 the Chrome Web Store — that's a Chrome restriction for every extension.
+
+## New in v1.1.0 — feedback learning (on-device)
+
+If a verdict is wrong, teach it: under the result in the panel, tap
+**"🚨 It's fraud"** or **"✅ It's safe"**. The model adjusts instantly —
+no server, no retraining run, nothing leaves the device.
+
+How it works:
+
+- The MuRIL encoder stays frozen; only the language's logistic head
+  moves. Your correction is stored as a small **delta** on top of the
+  trained weights (the base model in `model/config.json` is never
+  modified) and persists in `chrome.storage.local`.
+- Updates use **normalised SGD** — the step is divided by ||x||², so
+  one flag moves the flagged message's score by a bounded amount
+  instead of swinging the whole model. Measured on a 62-message eval
+  set: a genuine debit alert the base model flagged at p = 0.9996
+  flips to safe after 2 flags, with **zero** other verdicts changed.
+- The delta is norm-capped and anchored toward the base weights, so
+  personal learning tunes the model rather than hijacking it.
+- The toolbar popup shows your correction count, can **export
+  corrections as CSV** (for folding into the next full training run),
+  and can **reset learning** back to the exact trained base model.
+
+Honest framing: this is an RLHF-style human-feedback loop implemented
+as online logistic-regression updates — not full reinforcement
+learning, and the encoder is never retrained in the browser.

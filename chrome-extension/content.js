@@ -145,6 +145,64 @@
     safe:   { icon: "✅", text: "LOOKS SAFE" }
   };
 
+  let lastCheck = null; // { text, lang } of the verdict on screen
+
+  function renderResult(res, lang) {
+    const v = VERDICTS[res.label] || VERDICTS.safe;
+    const pct = Math.round(res.confidence * 100);
+    resultEl.className = "fd-result show " + res.label;
+    resultEl.innerHTML =
+      "<div class='fd-verdict'>" + v.icon + " " + v.text +
+      (res.demo ? "<span class='fd-demo-badge'>DEMO MODEL</span>" : "") + "</div>" +
+      "<div class='fd-bar'><div style='width:" + pct + "%'></div></div>" +
+      "<div class='fd-meta'>Confidence: <b>" + pct + "%</b> · Language: <b>" +
+      lang.label + "</b></div>" +
+      (res.reasons && res.reasons.length
+        ? "<div class='fd-reasons'>Signals: " +
+          res.reasons.map((r) => "“" + r + "”").join(", ") + "</div>" : "") +
+      (res.demo
+        ? "<div class='fd-reasons'>Keyword demo only — the trained on-device model could not be reached" +
+          (res.fallbackError ? " (" + res.fallbackError + ")" : "") + ".</div>"
+        : "<div class='fd-feedback'><span>Wrong verdict? Teach it:</span>" +
+          "<button class='fd-fb-btn' data-label='1'>🚨 It's fraud</button>" +
+          "<button class='fd-fb-btn' data-label='0'>✅ It's safe</button></div>" +
+          "<div class='fd-learn-note' id='fd-learn-note'></div>");
+    if (!res.demo) {
+      resultEl.querySelectorAll(".fd-fb-btn").forEach((b) =>
+        b.addEventListener("click", () => onFeedback(parseInt(b.dataset.label, 10))));
+      if (res.corrections) {
+        const note = resultEl.querySelector("#fd-learn-note");
+        if (note) note.textContent = "🧠 Personal corrections active: " + res.corrections;
+      }
+    }
+  }
+
+  async function onFeedback(label) {
+    if (!lastCheck) return;
+    const note = resultEl.querySelector("#fd-learn-note");
+    resultEl.querySelectorAll(".fd-fb-btn").forEach((b) => (b.disabled = true));
+    if (note) note.textContent = "🧠 Learning…";
+    try {
+      const out = await window.FraudModel.learn(lastCheck.text, lastCheck.lang, label);
+      const lbl = window.FraudModel.verdictFrom(out.probability, out.threshold);
+      renderResult({
+        label: lbl,
+        probability: out.probability,
+        confidence: lbl === "safe" ? 1 - out.probability : out.probability,
+        threshold: out.threshold,
+        demo: false,
+        reasons: [],
+        corrections: out.corrections
+      }, lastCheck.lang);
+      const n2 = resultEl.querySelector("#fd-learn-note");
+      if (n2) n2.textContent = "🧠 Learned — the model updated instantly. " +
+        "Personal corrections so far: " + out.corrections;
+    } catch (err) {
+      if (note) note.textContent = "Could not learn: " + (err && err.message ? err.message : "error");
+      resultEl.querySelectorAll(".fd-fb-btn").forEach((b) => (b.disabled = false));
+    }
+  }
+
   async function runCheck(raw) {
     const text = (raw || textEl.value || "").trim();
     if (!text) { textEl.focus(); return; }
@@ -152,21 +210,14 @@
     try {
       const lang = window.FraudDetectLanguage(text);
       const res = await window.FraudModel.predict(text, lang);
-      const v = VERDICTS[res.label] || VERDICTS.safe;
-      const pct = Math.round(res.confidence * 100);
-      resultEl.className = "fd-result show " + res.label;
-      resultEl.innerHTML =
-        "<div class='fd-verdict'>" + v.icon + " " + v.text +
-        (res.demo ? "<span class='fd-demo-badge'>DEMO MODEL</span>" : "") + "</div>" +
-        "<div class='fd-bar'><div style='width:" + pct + "%'></div></div>" +
-        "<div class='fd-meta'>Confidence: <b>" + pct + "%</b> · Language: <b>" +
-        lang.label + "</b></div>" +
-        (res.reasons && res.reasons.length
-          ? "<div class='fd-reasons'>Signals: " +
-            res.reasons.map((r) => "“" + r + "”").join(", ") + "</div>" : "") +
-        (res.demo
-          ? "<div class='fd-reasons'>Keyword demo only — the trained on-device model could not be reached" +
-            (res.fallbackError ? " (" + res.fallbackError + ")" : "") + ".</div>" : "");
+      lastCheck = { text, lang };
+      if (!res.demo) {
+        try {
+          const st = await window.FraudModel.learningState();
+          if (st && st.corrections) res.corrections = st.corrections;
+        } catch (e) { /* count is cosmetic */ }
+      }
+      renderResult(res, lang);
     } catch (err) {
       resultEl.className = "fd-result show likely";
       resultEl.innerHTML = "<div class='fd-verdict'>⚠️ Could not check</div>" +
