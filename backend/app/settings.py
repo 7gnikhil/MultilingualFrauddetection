@@ -63,7 +63,15 @@ class Settings:
 
 
 def get_settings(fresh: bool = False) -> Settings:
-    data_dir = Path(os.environ.get("DATA_DIR", str(BACKEND_DIR / "data")))
+    if os.environ.get("DATA_DIR"):
+        data_dir = Path(os.environ["DATA_DIR"])
+    elif os.environ.get("VERCEL"):
+        # Serverless filesystems are read-only outside /tmp; the local
+        # store would 500 on every write if it used the bundled path.
+        # (Durable production storage is the GitHub inbox store.)
+        data_dir = Path("/tmp/fraud-detector-data")
+    else:
+        data_dir = BACKEND_DIR / "data"
     manifest_default = BACKEND_DIR / "model_manifest.json"
     return Settings(
         data_dir=data_dir,
