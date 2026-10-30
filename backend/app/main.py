@@ -22,6 +22,7 @@ Design notes
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 import json
 import secrets
@@ -225,6 +226,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         rejected: list[dict[str, Any]] = []
         for idx, row in enumerate(raw_rows):
             try:
+                if isinstance(row, dict):
+                    row = _normalize_batch_row(row)
                 event = FeedbackEvent(**row) if isinstance(row, dict) else None
                 if event is None:
                     raise ValueError("row is not an object")
@@ -270,6 +273,43 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
     return app
+
+
+def _normalize_batch_row(row: dict[str, Any]) -> dict[str, Any]:
+    """Make extension CSV exports importable through the batch API.
+
+    The popup's corrections CSV (columns: timestamp, language,
+    corrected_label, model_probability_before, probability_after,
+    message/message_anonymized) lacks the bookkeeping fields the
+    single-event endpoint requires. Fill them deterministically:
+    a stable event_id hashed from the row itself (so re-uploading the
+    same CSV dedupes), the predicted label as the opposite of the
+    correction (a correction means the model said the other thing),
+    reward -1, and csv-import provenance markers. Uploading a CSV is
+    itself the user's explicit act, so consent defaults to true here;
+    the single-event endpoint stays strict.
+    """
+    row = dict(row)
+    if not row.get("predicted_probability") and row.get("model_probability_before"):
+        row["predicted_probability"] = row["model_probability_before"]
+    if not row.get("predicted_label") and row.get("corrected_label"):
+        corrected = str(row["corrected_label"]).strip().lower()
+        row["predicted_label"] = (
+            "safe" if corrected in {"yes", "1", "fraud", "scam", "true"} else "fraud"
+        )
+    if not row.get("event_id"):
+        basis = "|".join(
+            str(row.get(k, ""))
+            for k in ("timestamp", "language", "corrected_label", "message", "message_anonymized", "text_anonymized")
+        )
+        row["event_id"] = "csv-" + hashlib.sha256(basis.encode("utf-8")).hexdigest()[:24]
+    row.setdefault("reward", -1)
+    row.setdefault("model_version", "csv-import")
+    row.setdefault("extension_version", "csv-import")
+    row.setdefault("consent", True)
+    if not row.get("predicted_probability"):
+        row["predicted_probability"] = 0.5
+    return row
 
 
 def _rows_from_csv(raw: bytes) -> list[dict[str, Any]]:

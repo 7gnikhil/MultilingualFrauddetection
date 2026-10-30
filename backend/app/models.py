@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .privacy import find_raw_pii
 
@@ -68,8 +68,19 @@ def parse_consent(value: Any) -> bool:
 class FeedbackEvent(BaseModel):
     """One explicit, user-consented correction from the extension."""
 
+    model_config = ConfigDict(populate_by_name=True)
+
     event_id: str = Field(min_length=8, max_length=64)
-    text_anonymized: str = Field(min_length=1, max_length=10000)
+    # The extension's first client build sent `anonymized_text`; the CSV
+    # exporters use `message` / `message_anonymized`. Accept them all so
+    # every client version lands in the same canonical record.
+    text_anonymized: str = Field(
+        min_length=1,
+        max_length=10000,
+        validation_alias=AliasChoices(
+            "text_anonymized", "anonymized_text", "message_anonymized", "message", "text"
+        ),
+    )
     language: str
     predicted_label: str
     predicted_probability: float = Field(ge=0.0, le=1.0)
@@ -79,7 +90,11 @@ class FeedbackEvent(BaseModel):
     reward: float = Field(ge=-1.0, le=1.0)
     model_version: str = Field(min_length=1, max_length=64)
     extension_version: str = Field(min_length=1, max_length=64)
-    client_created_at: datetime
+    client_created_at: datetime = Field(
+        validation_alias=AliasChoices(
+            "client_created_at", "timestamp", "created_at", "ts"
+        )
+    )
     consent: bool
 
     @field_validator("event_id")
