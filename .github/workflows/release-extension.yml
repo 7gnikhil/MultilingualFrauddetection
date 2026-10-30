@@ -1,0 +1,165 @@
+name: Release extension
+
+# Packages chrome-extension/ into distributable zips and publishes a GitHub
+# Release. Trigger by pushing a version tag (v1.2.0) or manually.
+#
+# Microsoft Edge Add-ons: this workflow VALIDATES and PREPARES the store
+# package, but the actual submission must be done by the user in Microsoft
+# Partner Center with their own account (store review cannot be bypassed).
+# See DEPLOYMENT.md, section "Microsoft Edge Add-ons".
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to package, e.g. 1.2.0 (must match manifest.json)"
+        required: true
+        type: string
+      create_release:
+        description: "Create/update the GitHub Release"
+        required: false
+        default: true
+        type: boolean
+      allow_without_model:
+        description: "Package even if model/model.onnx is missing (NOT for production)"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write # needed to create the GitHub Release
+
+concurrency:
+  group: release-extension
+  cancel-in-progress: false
+
+env:
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "20"
+
+jobs:
+  package-and-release:
+    name: Package extension + GitHub Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            V="${GITHUB_REF_NAME#v}"
+          else
+            V="${{ inputs.version }}"
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "tag=v$V" >> "$GITHUB_OUTPUT"
+          echo "Packaging version $V"
+
+      - name: Validate manifest against version
+        run: |
+          python scripts/validate_manifest.py chrome-extension/manifest.json \
+            --expect-version "${{ steps.version.outputs.version }}"
+
+      - name: Syntax-check extension JavaScript
+        run: |
+          set -e
+          find chrome-extension -name '*.js' ! -name 'ort.min.js' -print0 |
+            while IFS= read -r -d '' f; do node --check "$f"; done
+
+      # model.onnx is too large for git (>100 MB) and is distributed as a
+      # model-release asset. Fetch it so the packaged extension is complete.
+      - name: Fetch model.onnx from the model release (if not in tree)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -f chrome-extension/model/model.onnx ]; then
+            echo "model.onnx already present in tree."
+          else
+            echo "Fetching model.onnx from the latest model-* release..."
+            gh release download --pattern 'model.onnx' --dir chrome-extension/model || \
+              echo "::warning::Could not download model.onnx from a model release."
+          fi
+          ls -la chrome-extension/model/ || true
+
+      - name: Verify model presence
+        if: ${{ inputs.allow_without_model != true }}
+        run: |
+          test -f chrome-extension/model/model.onnx || {
+            echo "::error::chrome-extension/model/model.onnx is missing. Publish a model release first, or rerun with allow_without_model=true for a code-only package."
+            exit 1
+          }
+
+      - name: Package zips + checksums
+        run: |
+          python scripts/package_extension.py \
+            --src chrome-extension \
+            --out dist \
+            --version "${{ steps.version.outputs.version }}"
+          ls -la dist
+          cat dist/SHA256SUMS.txt
+
+      - name: Upload packages as workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-packages-${{ steps.version.outputs.tag }}
+          path: dist/
+          retention-days: 90
+
+      - name: Create / update GitHub Release
+        if: ${{ github.event_name == 'push' || inputs.create_release }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Fraud Detector ${{ steps.version.outputs.tag }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            Chrome extension package for Fraud Detector ${{ steps.version.outputs.tag }}.
+
+            - `fraud-detector-*.zip` - unzip, then chrome://extensions -> Developer mode -> Load unpacked.
+            - `fraud-detector-edge-*.zip` - Microsoft Edge Add-ons store package (same contents).
+            - `SHA256SUMS.txt` - verify your download before installing.
+          files: |
+            dist/fraud-detector-*.zip
+            dist/fraud-detector-edge-*.zip
+            dist/SHA256SUMS.txt
+
+      # ------------------------------------------------------------------
+      # Microsoft Edge Add-ons: PREPARATION ONLY.
+      # The store package is validated and uploaded as a workflow artifact.
+      # Actual submission requires the user's own Microsoft Partner Center
+      # account and passes Microsoft's review - it is a manual step by
+      # design (see DEPLOYMENT.md). If Partner Center API credentials
+      # (EDGE_API_CLIENT_ID / EDGE_API_CLIENT_SECRET / EDGE_PRODUCT_ID) are
+      # ever added as secrets, a publish step can be added here.
+      # ------------------------------------------------------------------
+      - name: Prepare Microsoft Edge Add-ons submission package
+        run: |
+          python scripts/validate_manifest.py chrome-extension/manifest.json --edge
+          {
+            echo "## Microsoft Edge Add-ons - submission package prepared"
+            echo ""
+            echo "- Store zip: \`fraud-detector-edge-${{ steps.version.outputs.tag }}.zip\` (workflow artifact + GitHub Release asset)."
+            echo "- Manifest validated for Edge (MV3, no Chrome-only blockers found)."
+            echo ""
+            echo "**Manual step required:** sign in to Microsoft Partner Center with the"
+            echo "publisher account, open the Fraud Detector product, create a new"
+            echo "submission, upload the Edge zip, and submit for certification."
+            echo "Full checklist: DEPLOYMENT.md -> 'Microsoft Edge Add-ons'."
+          } >> "$GITHUB_STEP_SUMMARY"

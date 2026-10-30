@@ -1,0 +1,156 @@
+name: CI
+
+# Fast, cheap checks on every push/PR. Heavy training lives in retrain.yml;
+# this workflow only smoke-tests that the training entry points still run.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "20"
+
+jobs:
+  python-quality:
+    name: Python lint + unit tests (ml/)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install tooling + project deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff pytest
+          if [ -f ml/requirements.txt ]; then pip install -r ml/requirements.txt; fi
+
+      - name: Byte-compile all Python sources
+        run: python -m compileall -q ml backend
+
+      - name: Lint (fatal errors block; style is advisory)
+        run: |
+          ruff check --select E9,F63,F7,F82 ml backend
+          ruff check ml backend || true
+
+      - name: Unit tests (ml/)
+        if: ${{ hashFiles('ml/tests/**') != '' }}
+        run: pytest ml/tests -q
+
+  backend-tests:
+    name: Backend tests (FastAPI)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install backend deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest httpx
+          if [ -f backend/requirements.txt ]; then pip install -r backend/requirements.txt; fi
+
+      - name: Smoke-import the Vercel entry point
+        run: |
+          python - <<'PY'
+          import importlib.util
+          import pathlib
+
+          entry = pathlib.Path("backend/api/index.py")
+          if not entry.exists():
+              print("backend/api/index.py not present yet - skipping import smoke.")
+          else:
+              spec = importlib.util.spec_from_file_location("vercel_app", entry)
+              mod = importlib.util.module_from_spec(spec)
+              spec.loader.exec_module(mod)
+              assert hasattr(mod, "app"), "backend/api/index.py must expose `app` (the FastAPI instance)"
+              print("FastAPI app import OK:", type(mod.app).__name__)
+          PY
+
+      - name: Backend tests
+        if: ${{ hashFiles('backend/tests/**') != '' }}
+        run: pytest backend/tests -q
+
+  extension-js:
+    name: Extension JS syntax + manifest checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Set up Python (for the manifest validator)
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Syntax-check extension JavaScript
+        run: |
+          set -e
+          # ort.min.js is a vendored third-party bundle - excluded.
+          find chrome-extension -name '*.js' ! -name 'ort.min.js' -print0 |
+            while IFS= read -r -d '' f; do
+              echo "node --check $f"
+              node --check "$f"
+            done
+
+      - name: Validate manifest.json
+        run: python scripts/validate_manifest.py chrome-extension/manifest.json
+
+      - name: Extension unit tests (if present)
+        if: ${{ hashFiles('chrome-extension/tests/**') != '' }}
+        run: node --test chrome-extension/tests/
+
+  training-smoke:
+    name: Training smoke test (tiny fixture, CPU)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install ML deps
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f ml/requirements.txt ]; then pip install -r ml/requirements.txt; fi
+
+      # The smoke run trains heads on a tiny checked-in fixture of precomputed
+      # embeddings. It must NOT download MuRIL or touch the real dataset -
+      # it only proves the train -> evaluate -> config-export path still works.
+      - name: Smoke-train on fixture embeddings
+        if: ${{ hashFiles('ml/configs/smoke.yaml') != '' }}
+        run: |
+          python -m ml.train --smoke --config ml/configs/smoke.yaml --out artifacts/smoke
+          python -m ml.evaluate --smoke --model-dir artifacts/smoke --out artifacts/smoke/eval.json
+          test -f artifacts/smoke/config.json
+          echo "Training smoke test passed."

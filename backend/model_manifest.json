@@ -1,0 +1,1 @@
+{"config_sha256":"","config_url":"","model_sha256":"","model_url":"","notes":"Placeholder manifest. The CI/CD retraining pipeline replaces this file (or the MODEL_* env vars) when it promotes a validated challenger model.","version":"0.0.0-dev"}

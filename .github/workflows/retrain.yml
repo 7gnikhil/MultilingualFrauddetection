@@ -1,0 +1,265 @@
+name: Retrain challenger model
+
+# The reinforcement loop, as a pipeline:
+#   user corrections -> backend -> private feedback repo -> (dispatch/schedule)
+#   -> this workflow -> preprocess + merge feedback -> train CHALLENGER
+#   -> promotion gates (MODEL_PROMOTION_POLICY.md) -> artifacts + PR.
+#
+# The champion model is NEVER overwritten by this workflow and the PR it
+# opens is NEVER auto-merged. Promotion happens only when a human reviews
+# the metrics in the PR and merges it.
+#
+# Triggers:
+#   - workflow_dispatch: manual run from the Actions tab.
+#   - repository_dispatch: the backend fires `feedback-threshold-reached`
+#     when enough new corrections have accumulated (see DEPLOYMENT.md).
+#     NOTE: repository_dispatch only runs the workflow as it exists on the
+#     default branch.
+#   - schedule: weekly safety net; the run no-ops (trains nothing) when
+#     there is not enough new feedback.
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Why this retrain was triggered"
+        required: false
+        default: "manual"
+      min_new_feedback:
+        description: "Minimum new labelled feedback rows required to train"
+        required: false
+        default: "50"
+  repository_dispatch:
+    types: [feedback-threshold-reached, retrain-requested]
+  schedule:
+    - cron: "17 3 * * 1" # Mondays 03:17 UTC
+
+# Default to read-only; only the PR job below gets write permissions.
+permissions:
+  contents: read
+
+concurrency:
+  group: retrain-challenger
+  cancel-in-progress: false # never kill a training run halfway
+
+env:
+  PYTHON_VERSION: "3.11"
+  # Repository variable naming the private feedback repo, e.g.
+  # "7gnikhil/fraud-feedback-private". Set under Settings -> Variables.
+  FEEDBACK_REPO: ${{ vars.FEEDBACK_REPO }}
+
+jobs:
+  retrain:
+    name: Merge feedback, train challenger, evaluate gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    outputs:
+      gates_passed: ${{ steps.gates.outputs.passed }}
+      feedback_available: ${{ steps.feedback.outputs.available }}
+    steps:
+      - name: Checkout main repo
+        uses: actions/checkout@v4
+
+      # The feedback repo is private and holds raw user corrections (CSV).
+      # Access is via a fine-grained PAT stored as FEEDBACK_REPO_TOKEN,
+      # scoped to that one repo with Contents: read.
+      - name: Checkout private feedback repo
+        if: ${{ vars.FEEDBACK_REPO != '' }}
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.FEEDBACK_REPO }}
+          token: ${{ secrets.FEEDBACK_REPO_TOKEN }}
+          path: feedback-data
+
+      - name: Check feedback availability
+        id: feedback
+        env:
+          MIN_NEW: ${{ inputs.min_new_feedback || '50' }}
+        run: |
+          COUNT=0
+          if [ -d feedback-data/exports ]; then
+            COUNT=$(cat feedback-data/exports/*.csv 2>/dev/null | grep -c . || true)
+          fi
+          echo "Feedback rows visible (incl. header/old rows): $COUNT"
+          if [ "$COUNT" -gt 1 ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No feedback export found - challenger will train on the base dataset only."
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Cache Hugging Face models (MuRIL)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-muril-${{ runner.os }}-v1
+
+      - name: Install training dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f ml/requirements.txt ]; then pip install -r ml/requirements.txt; fi
+          # Training-only deps (CPU torch etc.) live in a separate file so the
+          # backend/CI installs stay light.
+          if [ -f ml/requirements-train.txt ]; then pip install -r ml/requirements-train.txt; fi
+
+      - name: Preprocess base dataset
+        run: |
+          python -m ml.data.build_dataset \
+            --sheet-export data/raw/sheet_export.csv \
+            --out data/processed/train_base.csv
+
+      - name: Merge feedback into training data
+        if: ${{ steps.feedback.outputs.available == 'true' }}
+        run: |
+          # merge_feedback anonymises ([OTP]/[PHONE]/[ACCOUNT]...), dedupes by
+          # message skeleton, and drops rows whose skeleton already exists in
+          # the locked test/challenge sets (leakage guard).
+          python -m ml.data.merge_feedback \
+            --feedback-dir feedback-data/exports \
+            --base data/processed/train_base.csv \
+            --out data/processed/train_merged.csv
+
+      - name: Select training dataset
+        id: dataset
+        run: |
+          if [ -f data/processed/train_merged.csv ]; then
+            echo "path=data/processed/train_merged.csv" >> "$GITHUB_OUTPUT"
+          else
+            echo "path=data/processed/train_base.csv" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Train challenger
+        run: |
+          python -m ml.train \
+            --config ml/configs/challenger.yaml \
+            --dataset "${{ steps.dataset.outputs.path }}" \
+            --out artifacts/challenger
+
+      # ml.evaluate compares challenger vs champion on LOCKED real-only
+      # grouped CV + the challenge set, writes artifacts/evaluation/report.json
+      # and exits non-zero when any promotion gate fails. We capture the
+      # verdict instead of failing the job, so artifacts/PR logic can react.
+      - name: Evaluate promotion gates
+        id: gates
+        run: |
+          set +e
+          python -m ml.evaluate \
+            --champion models/champion/config.json \
+            --challenger artifacts/challenger \
+            --gates ml/configs/promotion_gates.yaml \
+            --out artifacts/evaluation/report.json
+          CODE=$?
+          set -e
+          if [ "$CODE" -eq 0 ]; then
+            echo "passed=true" >> "$GITHUB_OUTPUT"
+            echo "Promotion gates: PASSED"
+          else
+            echo "passed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Promotion gates: FAILED (exit $CODE). Champion unchanged."
+          fi
+
+      - name: Write evaluation summary
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import pathlib
+
+          summary = pathlib.Path(os.environ["GITHUB_STEP_SUMMARY"])
+          report_path = pathlib.Path("artifacts/evaluation/report.json")
+          lines = ["## Challenger evaluation", ""]
+          if report_path.exists():
+              report = json.loads(report_path.read_text())
+              lines.append("```json")
+              lines.append(json.dumps(report, indent=2)[:6000])
+              lines.append("```")
+          else:
+              lines.append("No evaluation report was produced - see job logs.")
+          summary.write_text("\n".join(lines) + "\n")
+          PY
+
+      - name: Upload challenger artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: challenger-${{ github.run_id }}
+          path: |
+            artifacts/challenger/
+            artifacts/evaluation/
+          retention-days: 90
+
+  propose-promotion:
+    name: Open promotion PR (human merges - never auto-merged)
+    needs: retrain
+    if: ${{ needs.retrain.outputs.gates_passed == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # push the candidate branch
+      pull-requests: write # open the PR
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download challenger artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: challenger-${{ github.run_id }}
+          path: artifacts
+
+      - name: Stage candidate model files
+        run: |
+          mkdir -p models/candidate
+          cp artifacts/challenger/config.json models/candidate/config.json
+          if [ -f artifacts/challenger/model.onnx ]; then
+            echo "::notice::model.onnx ships via a model Release asset, not git - config.json references its release URL + sha256."
+          fi
+          mkdir -p models/candidate/evaluation
+          cp artifacts/evaluation/report.json models/candidate/evaluation/report.json
+
+      - name: Create promotion PR
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: model/challenger-${{ github.run_number }}
+          delete-branch: true
+          add-paths: |
+            models/candidate/**
+          commit-message: "Challenger model candidate (run ${{ github.run_number }})"
+          title: "Model challenger - promotion candidate (run ${{ github.run_number }})"
+          labels: |
+            model-promotion
+            needs-review
+          body: |
+            ## Challenger model - automated promotion candidate
+
+            Trained by the `Retrain challenger model` workflow
+            (trigger: `${{ github.event_name }}`, run `${{ github.run_number }}`).
+
+            - Full metrics: `models/candidate/evaluation/report.json` in this PR.
+            - Gates: all promotion gates in `MODEL_PROMOTION_POLICY.md` passed
+              (locked real-only grouped CV + challenge set).
+            - The champion in `models/champion/` is **untouched** by this PR.
+
+            ### Reviewer checklist
+            - [ ] Per-language F1/precision diff vs champion is acceptable
+            - [ ] Challenge-set results reviewed (esp. awareness-message false positives)
+            - [ ] Feedback volume + label spot-check recorded in the eval report
+            - [ ] Rollback note understood: reverting this PR restores the old champion
+
+            **This PR is not auto-merged. Merging it is the promotion decision.**
+
+  gates-rejected:
+    name: Report rejected challenger
+    needs: retrain
+    if: ${{ needs.retrain.outputs.gates_passed != 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Note outcome
+        run: |
+          echo "Challenger did not pass the promotion gates."
+          echo "Champion model unchanged. Metrics are in the challenger-${{ github.run_id }} artifact."

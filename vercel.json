@@ -1,0 +1,1 @@
+{"$schema":"https://openapi.vercel.sh/vercel.json","functions":{"backend/api/index.py":{"maxDuration":30,"memory":512}},"installCommand":"pip install -r backend/requirements.txt","regions":["bom1"],"rewrites":[{"destination":"/backend/api/index.py","source":"/api/:path*"},{"destination":"/backend/api/index.py","source":"/health"}]}
