@@ -211,3 +211,44 @@ def test_oversized_text_rejected(client: TestClient, settings: Settings) -> None
     settings.max_text_chars = 20
     resp = client.post("/v1/feedback", json=valid_event())
     assert resp.status_code == 422
+
+
+def test_extension_legacy_payload_accepted(client: TestClient) -> None:
+    """The first v4 extension build sent anonymized_text + timestamp."""
+    event = valid_event(event_id="evt-legacy-0001")
+    event["anonymized_text"] = event.pop("text_anonymized")
+    event["timestamp"] = event.pop("client_created_at")
+    resp = client.post("/v1/feedback", json=event)
+    assert resp.status_code == 202
+    assert resp.json()["status"] == "accepted"
+
+
+def test_popup_csv_batch_import_and_dedupe(client: TestClient) -> None:
+    csv_body = (
+        "timestamp,language,corrected_label,model_probability_before,probability_after,message_anonymized\r\n"
+        "2026-10-30T05:00:00.000Z,English,Yes,0.1200,0.9500,"
+        "\"Your account will be blocked today. Share the [OTP] and pay via [UPI].\"\r\n"
+    )
+    resp = client.post(
+        "/v1/feedback/batch", content=csv_body, headers={"Content-Type": "text/csv"}
+    )
+    assert resp.status_code == 200
+    assert resp.json()["accepted"] == 1
+    again = client.post(
+        "/v1/feedback/batch", content=csv_body, headers={"Content-Type": "text/csv"}
+    )
+    assert again.json()["duplicates"] == 1
+
+
+def test_v3_csv_batch_import(client: TestClient) -> None:
+    csv_body = (
+        "timestamp,language,corrected_label,model_probability_before,probability_after,message\r\n"
+        "2026-10-30T05:05:00.000Z,Telugu,No,0.9900,0.1000,"
+        "\"Debited Rs [OTP] from your account. Do not share your OTP. Bank never asks for OTP.\"\r\n"
+    )
+    resp = client.post(
+        "/v1/feedback/batch", content=csv_body, headers={"Content-Type": "text/csv"}
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["accepted"] == 1, body
