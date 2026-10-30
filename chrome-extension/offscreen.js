@@ -1,31 +1,37 @@
 /**
  * offscreen.js — the REAL trained-model inference engine + on-device
- * feedback learning (v1.2.0).
+ * feedback learning (model v4 stack; extension v1.3.0).
  *
  * Runs in a Chrome offscreen document (an extension page, so WebAssembly
  * is allowed and the ~230 MB model loads ONCE for all tabs, not per page).
- * Pipeline — identical to training_v3/train.py at inference time:
+ * Pipeline (ml-final/train_final_v4.py):
  *   raw text
  *     -> structured features from the RAW text        (features.js)
  *     -> anonymize()                                   (anonymize.js)
- *     -> MuRIL WordPiece tokenize                      (tokenizer.js)
- *     -> MuRIL encoder ONNX (int8) -> mean pooling     (ort.min.js)
- *     -> per-language head: standardise (+ struct features for the
- *        emb+struct arms) -> logistic regression -> probability
+ *     -> Arm A: hashed lexical LR over the anonymized text — word(1,2)
+ *        n-grams @2^14 + char_wb(3,5) n-grams @2^15    (lexical.js)
+ *     -> Arm B: MuRIL WordPiece tokenize               (tokenizer.js)
+ *        -> MuRIL encoder ONNX (int8) -> mean pooling  (ort.min.js)
+ *        -> per-language head: standardise (embeddings + struct
+ *           features) -> logistic regression
+ *     -> meta stack: sigmoid(a + b*logit(pA) + c*logit(pB))
  *     -> compare with the language's tuned threshold
+ * A head without hash/meta fields is scored as a legacy v3 single head
+ * (arm B only), so older downloaded configs keep working.
  * Inference itself never leaves the device: the model files are inside
  * the extension. Optional feedback upload is handled separately by the
  * background worker and only after explicit opt-in.
  *
  * FEEDBACK LEARNING (online logistic-regression updates):
  * The encoder stays frozen. When the user flags a verdict ("actually
- * fraud" / "actually safe"), the head for that language takes a few
+ * fraud" / "actually safe"), the delta for that language takes a few
  * normalised SGD steps on that one message (step divided by ||x||^2,
- * so a single flag moves the logit by a bounded amount). The delta is
+ * so a single flag moves the logit by a bounded amount), applied on top
+ * of the final stacked logit. The delta is
  * kept SEPARATE from the trained weights, capped
  * in norm, pulled back toward zero by the anchor term, persisted in
  * chrome.storage.local, and can be reset at any time — the base model
- * in model/config.json is never modified.
+ * in model/config_v4.json is never modified.
  */
 (function () {
   "use strict";
@@ -37,10 +43,15 @@
   var DELTAS_KEY = "fdLearnDeltas";
   var ACTIVE_CONFIG_KEY = "fdActiveModelConfig";
   var MODEL_STATE_KEY = "fdModelUpdateState";
-  var BUNDLED_MODEL_VERSION = "3.0.0";
+  var BUNDLED_MODEL_VERSION = "4.0.0";
   var DEFAULT_UNCERTAINTY_MARGIN = 0.08;
 
   function sigmoid(z) { return 1 / (1 + Math.exp(-z)); }
+
+  function logit(p) {
+    var c = Math.min(1 - 1e-6, Math.max(1e-6, p));
+    return Math.log(c / (1 - c));
+  }
 
   function scale(vec, mean, scaleArr) {
     var out = new Array(vec.length);
@@ -73,6 +84,37 @@
     return true;
   }
 
+  function isFiniteNumber(value) {
+    return typeof value === "number" && Number.isFinite(value);
+  }
+
+  function isValidCoefPairs(pairs, nFeatures) {
+    if (!Array.isArray(pairs)) return false;
+    for (var i = 0; i < pairs.length; i++) {
+      var p = pairs[i];
+      if (!Array.isArray(p) || p.length !== 2 ||
+          !Number.isInteger(p[0]) || p[0] < 0 || p[0] >= nFeatures ||
+          !isFiniteNumber(p[1])) return false;
+    }
+    return true;
+  }
+
+  // v4 stack fields: a head either carries BOTH hash and meta (stacked
+  // model) or neither (legacy v3 single head). Half a stack is unusable.
+  function isValidStack(head) {
+    var hasHash = !!head.hash, hasMeta = !!head.meta;
+    if (!hasHash && !hasMeta) return true;
+    if (!hasHash || !hasMeta) return false;
+    var h = head.hash, m = head.meta;
+    return Number.isInteger(h.word_n_features) && h.word_n_features > 0 &&
+      Number.isInteger(h.char_n_features) && h.char_n_features > 0 &&
+      isFiniteNumber(h.intercept) &&
+      isValidCoefPairs(h.word_coef, h.word_n_features) &&
+      isValidCoefPairs(h.char_coef, h.char_n_features) &&
+      isFiniteNumber(m.intercept) && isFiniteNumber(m.weight_hash) &&
+      isFiniteNumber(m.weight_int8);
+  }
+
   // Defence in depth: background validates a downloaded config before it
   // becomes active, and the model host validates it again before use. A
   // malformed override is ignored in favour of the bundled config.
@@ -91,6 +133,7 @@
       if (structLength > 0 &&
           (!isFiniteArray(head.scaler_s_mean, structLength) ||
            !isFiniteArray(head.scaler_s_scale, structLength))) return false;
+      if (!isValidStack(head)) return false;
     }
     return true;
   }
@@ -133,22 +176,53 @@
         for (var j = 0; j < H; j++) emb[j] += data[i * H + j];
       }
       for (var k = 0; k < H; k++) emb[k] /= maskSum;
-      return { emb: emb, struct: struct };
+      return { emb: emb, struct: struct, clean: clean };
     }
 
     function headVector(head, emb, struct) {
       var x = scale(emb, head.scaler_e_mean, head.scaler_e_scale);
-      if (head.arm === "own_struct" || head.arm === "joint_struct") {
+      // Struct features are appended whenever the head carries struct
+      // scalers (v3 "own_struct"/"joint_struct" heads and the v4 stack's
+      // arm B alike) — keyed on the scalers, not the arm label, so a
+      // renamed arm can never silently drop the struct block.
+      if (head.scaler_s_mean && head.scaler_s_scale) {
         x = x.concat(scale(struct, head.scaler_s_mean, head.scaler_s_scale));
       }
       return x;
     }
 
-    function score(head, headName, x) {
+    function armBLogit(head, x) {
+      var z = head.intercept;
+      for (var n = 0; n < x.length; n++) z += head.coef[n] * x[n];
+      return z;
+    }
+
+    /**
+     * Base stacked logit (no learning delta).
+     * v4 head (hash + meta present):
+     *   z = meta.intercept + meta.weight_hash * logit(p_hash)
+     *                      + meta.weight_int8 * logit(p_emb)
+     * Legacy v3 head: z = arm B logit alone.
+     * Returns { z, probHash, probEmb } (probHash is null for v3 heads).
+     */
+    function baseLogit(head, clean, x) {
+      var zB = armBLogit(head, x);
+      var probEmb = sigmoid(zB);
+      if (head.hash && head.meta && typeof FraudLexical !== "undefined") {
+        var probHash = FraudLexical.probability(clean, head.hash);
+        var z = head.meta.intercept +
+          head.meta.weight_hash * logit(probHash) +
+          head.meta.weight_int8 * logit(probEmb);
+        return { z: z, probHash: probHash, probEmb: probEmb };
+      }
+      return { z: zB, probHash: null, probEmb: probEmb };
+    }
+
+    function score(head, headName, clean, x) {
       var d = deltas[headName];
-      var z = head.intercept + (d ? d.b : 0);
-      for (var n = 0; n < x.length; n++) {
-        z += (head.coef[n] + (d ? d.w[n] : 0)) * x[n];
+      var z = baseLogit(head, clean, x).z + (d ? d.b : 0);
+      if (d) {
+        for (var n = 0; n < x.length; n++) z += d.w[n] * x[n];
       }
       return sigmoid(z);
     }
@@ -158,8 +232,11 @@
       if (!head) throw new Error("No trained head for " + headName);
       var ef = await embedAndFeatures(rawText);
       var x = headVector(head, ef.emb, ef.struct);
+      var base = baseLogit(head, ef.clean, x);
       return {
-        probability: score(head, headName, x),
+        probability: score(head, headName, ef.clean, x),
+        probHash: base.probHash,
+        probEmb: base.probEmb,
         threshold: head.threshold,
         uncertaintyMargin: uncertaintyMargin(config, head),
         modelVersion: modelVersion,
@@ -179,7 +256,7 @@
       var ef = await embedAndFeatures(rawText);
       var x = headVector(head, ef.emb, ef.struct);
       var d = getDelta(headName, head.coef.length);
-      var before = score(head, headName, x);
+      var before = score(head, headName, ef.clean, x);
       var y = label ? 1 : 0;
       // Normalised SGD: the step is divided by ||x||^2, so one flag moves
       // the flagged message's logit by roughly LEARN_STEP — not by the
@@ -189,7 +266,7 @@
       var xNorm2 = 1;
       for (var q = 0; q < x.length; q++) xNorm2 += x[q] * x[q];
       for (var epoch = 0; epoch < LEARN_EPOCHS; epoch++) {
-        var p = score(head, headName, x);
+        var p = score(head, headName, ef.clean, x);
         var err = p - y;
         if (Math.abs(err) < 1e-3) break;
         var step = LEARN_STEP * err / xNorm2;
@@ -207,7 +284,7 @@
       }
       return {
         probabilityBefore: before,
-        probability: score(head, headName, x),
+        probability: score(head, headName, ef.clean, x),
         threshold: head.threshold,
         uncertaintyMargin: uncertaintyMargin(config, head),
         modelVersion: modelVersion
@@ -282,10 +359,10 @@
       try {
         ort.env.wasm.wasmPaths = modelURL("");
         ort.env.wasm.numThreads = 1;
-        var cfgResp = await fetch(modelURL("config.json"));
-        if (!cfgResp.ok) throw new Error("config.json missing from model/");
+        var cfgResp = await fetch(modelURL("config_v4.json"));
+        if (!cfgResp.ok) throw new Error("config_v4.json missing from model/");
         var bundledConfig = await cfgResp.json();
-        if (!isUsableConfig(bundledConfig)) throw new Error("Bundled config.json has an invalid shape");
+        if (!isUsableConfig(bundledConfig)) throw new Error("Bundled config_v4.json has an invalid shape");
         var downloadedConfig = await storageGet(ACTIVE_CONFIG_KEY);
         var modelState = await storageGet(MODEL_STATE_KEY);
         var useDownloaded = isUsableConfig(downloadedConfig);

@@ -53,7 +53,7 @@ function renderSettings(resp) {
   if (!resp || !resp.ok) return;
   if (resp.settings) {
     shareEl.checked = resp.settings.shareCorrections === true;
-    apiBaseEl.value = resp.settings.apiBaseUrl || "https://YOUR-BACKEND.vercel.app";
+    apiBaseEl.value = resp.settings.apiBaseUrl || "https://multilingual-frauddetection.vercel.app";
   }
   queueEl.textContent = typeof resp.queuedFeedback === "number" ? resp.queuedFeedback : 0;
   renderModelState(resp.modelState);

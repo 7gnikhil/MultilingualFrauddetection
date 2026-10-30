@@ -1,4 +1,4 @@
-/* background.js — service worker for Fraud Detector v1.2.0.
+/* background.js — service worker for Fraud Detector v1.3.0.
  *
  * Responsibilities:
  *  - toolbar/context-menu actions and offscreen model-host management;
@@ -24,8 +24,8 @@ const PREVIOUS_PACKAGE_KEY = "fdPreviousModelPackage";
 
 const MAX_CORRECTIONS = 500;
 const MAX_QUEUE = 200;
-const DEFAULT_API_BASE_URL = "https://YOUR-BACKEND.vercel.app";
-const BUNDLED_MODEL_VERSION = "3.0.0";
+const DEFAULT_API_BASE_URL = "https://multilingual-frauddetection.vercel.app";
+const BUNDLED_MODEL_VERSION = "4.0.0";
 const REQUIRED_LANGUAGES = ["English", "Hindi", "Telugu"];
 const SYNC_ALARM = "fd-feedback-sync";
 
@@ -37,8 +37,8 @@ function storageSet(values) { return chrome.storage.local.set(values); }
 function storageRemove(keys) { return chrome.storage.local.remove(keys); }
 
 function extensionVersion() {
-  try { return chrome.runtime.getManifest().version || "1.2.0"; }
-  catch (e) { return "1.2.0"; }
+  try { return chrome.runtime.getManifest().version || "1.3.0"; }
+  catch (e) { return "1.3.0"; }
 }
 
 function makeEventId() {
@@ -307,6 +307,28 @@ function validateModelConfig(config, expectedVersion) {
          head.uncertainty_margin < 0 || head.uncertainty_margin > 0.49)) {
       errors.push(language + " uncertainty_margin must be between 0 and 0.49.");
     }
+    // v4 stack fields: hash and meta must arrive together or not at all.
+    const hasHash = !!head.hash, hasMeta = !!head.meta;
+    if (hasHash !== hasMeta) {
+      errors.push(language + " stack must include both hash and meta (or neither).");
+    } else if (hasHash) {
+      const h = head.hash, m = head.meta;
+      const validPairs = (pairs, n) => Array.isArray(pairs) && pairs.every((p) =>
+        Array.isArray(p) && p.length === 2 && Number.isInteger(p[0]) &&
+        p[0] >= 0 && p[0] < n && typeof p[1] === "number" && Number.isFinite(p[1]));
+      if (!Number.isInteger(h.word_n_features) || h.word_n_features <= 0 ||
+          !Number.isInteger(h.char_n_features) || h.char_n_features <= 0 ||
+          typeof h.intercept !== "number" || !Number.isFinite(h.intercept) ||
+          !validPairs(h.word_coef, h.word_n_features) ||
+          !validPairs(h.char_coef, h.char_n_features)) {
+        errors.push(language + " hash arm is malformed.");
+      }
+      if (typeof m.intercept !== "number" || !Number.isFinite(m.intercept) ||
+          typeof m.weight_hash !== "number" || !Number.isFinite(m.weight_hash) ||
+          typeof m.weight_int8 !== "number" || !Number.isFinite(m.weight_int8)) {
+        errors.push(language + " meta stack must have finite intercept/weight_hash/weight_int8.");
+      }
+    }
   }
   if (config.uncertainty_margin != null &&
       (typeof config.uncertainty_margin !== "number" ||
@@ -335,8 +357,8 @@ function compareVersions(a, b) {
 async function getBundledConfig() {
   if (!bundledConfigPromise) {
     bundledConfigPromise = (async () => {
-      const response = await fetch(chrome.runtime.getURL("model/config.json"));
-      if (!response.ok) throw new Error("Bundled model/config.json could not be read.");
+      const response = await fetch(chrome.runtime.getURL("model/config_v4.json"));
+      if (!response.ok) throw new Error("Bundled model/config_v4.json could not be read.");
       const config = await response.json();
       const validation = validateModelConfig(config);
       if (!validation.ok) throw new Error("Bundled model config is invalid: " + validation.errors.join(" "));

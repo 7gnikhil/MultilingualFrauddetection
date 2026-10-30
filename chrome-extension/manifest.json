@@ -1,1 +1,57 @@
-{"action":{"default_icon":{"128":"icons/icon128.png","16":"icons/icon16.png","32":"icons/icon32.png","48":"icons/icon48.png"},"default_popup":"popup.html","default_title":"Fraud Detector"},"background":{"service_worker":"background.js"},"content_scripts":[{"css":["content.css"],"js":["anonymize.js","features.js","langdetect.js","model.js","content.js"],"matches":["<all_urls>"],"run_at":"document_idle"}],"content_security_policy":{"extension_pages":"script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"},"description":"Check messages for fraud with a trained multilingual model that runs locally. Corrections adapt the on-device model; anonymized corrections are uploaded only if you explicitly opt in.","host_permissions":["<all_urls>","https://your-backend.vercel.app/*"],"icons":{"128":"icons/icon128.png","16":"icons/icon16.png","32":"icons/icon32.png","48":"icons/icon48.png"},"manifest_version":3,"name":"Fraud Detector — Telugu / Hindi / English","permissions":["activeTab","alarms","contextMenus","storage","offscreen"],"version":"1.2.0"}
+{
+  "action": {
+    "default_icon": {
+      "128": "icons/icon128.png",
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png"
+    },
+    "default_popup": "popup.html",
+    "default_title": "Fraud Detector"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "css": [
+        "content.css"
+      ],
+      "js": [
+        "anonymize.js",
+        "features.js",
+        "langdetect.js",
+        "model.js",
+        "content.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
+  "description": "Check messages for fraud with a trained multilingual model that runs locally. Corrections adapt the on-device model; anonymized corrections are uploaded only if you explicitly opt in.",
+  "host_permissions": [
+    "<all_urls>",
+    "https://multilingual-frauddetection.vercel.app/*"
+  ],
+  "icons": {
+    "128": "icons/icon128.png",
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png"
+  },
+  "manifest_version": 3,
+  "name": "Fraud Detector \u2014 Telugu / Hindi / English",
+  "permissions": [
+    "activeTab",
+    "alarms",
+    "contextMenus",
+    "storage",
+    "offscreen"
+  ],
+  "version": "1.3.0"
+}

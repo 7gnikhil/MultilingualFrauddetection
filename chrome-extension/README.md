@@ -329,3 +329,27 @@ config supplies its own `model_version` or `version`.
 Note: the floating button cannot appear on `chrome://` internal pages
 or extension-store pages — that is a Chrome restriction for every
 extension.
+
+---
+
+## v1.3.0 — model v4 (stacked hash + MuRIL)
+
+The bundled model is now `model/config_v4.json` (model_version 4.0.0);
+the v3 config is kept alongside as `model/config_v3_backup.json`.
+Per language the prediction is a 3-parameter logistic stack of two arms:
+
+- **Arm A (`lexical.js`)** — logistic regression over hashed lexical
+  features (word 1–2-grams into 2^14 bins + char_wb 3–5-grams into 2^15
+  bins, MurmurHash3, L2-normalised per block), a faithful port of the
+  scikit-learn `HashingVectorizer` recipe used in training.
+- **Arm B** — the previous `own_struct` head: standardised INT8 MuRIL
+  embeddings + 30 structured features.
+- **Meta** — `sigmoid(a + b·logit(pA) + c·logit(pB))`, compared against
+  thresholds EN 0.40 / HI 0.51 / TE 0.36.
+
+The on-device feedback-learning delta now adjusts the final stacked
+logit. A downloaded config carrying only the v3 fields (no `hash`/`meta`)
+is still accepted and scored as a legacy single head. Training and
+verification details: `ml-final/BUILD_REPORT.md` in the v4 components
+tree. As before, copy `model.onnx` in from the v3 package — it is not
+part of this source copy.
