@@ -135,5 +135,54 @@
     }
   }
 
-  global.FraudModel = { predict: predict };
+  function sendToBackground(message, timeoutMs) {
+    return new Promise(function (resolve, reject) {
+      var timer = setTimeout(function () {
+        reject(new Error("Model host timed out (first load can take ~30s — try again)"));
+      }, timeoutMs || 180000);
+      try {
+        chrome.runtime.sendMessage(message, function (resp) {
+          clearTimeout(timer);
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+          } else if (!resp) {
+            reject(new Error("No response from model host"));
+          } else if (!resp.ok) {
+            reject(new Error(resp.error || "Model host error"));
+          } else {
+            resolve(resp);
+          }
+        });
+      } catch (e) {
+        clearTimeout(timer);
+        reject(e);
+      }
+    });
+  }
+
+  /**
+   * learn(rawText, langInfo, label) — the user corrected a verdict.
+   * label: 1 = actually fraud, 0 = actually safe. The offscreen host
+   * updates the language head's delta in real time and the correction
+   * is logged for CSV export / future retraining.
+   * -> { probability, threshold, corrections }
+   */
+  async function learn(rawText, langInfo, label) {
+    var headName = (langInfo && langInfo.head) || "English";
+    var resp = await sendToBackground(
+      { type: "FD_FEEDBACK_REQUEST", text: rawText, head: headName, label: label ? 1 : 0 });
+    return resp.result;
+  }
+
+  async function learningState() {
+    var resp = await sendToBackground({ type: "FD_LEARNING_STATE_REQUEST" }, 15000);
+    return resp;
+  }
+
+  global.FraudModel = {
+    predict: predict,
+    learn: learn,
+    learningState: learningState,
+    verdictFrom: verdictFrom
+  };
 })(typeof window !== "undefined" ? window : globalThis);
