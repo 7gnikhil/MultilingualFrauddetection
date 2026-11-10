@@ -33,7 +33,7 @@
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
   },
-    "description": "Detects fraud in Telugu, Hindi and English messages using an on-device ML model. No uploads unless you opt in.",
+  "description": "Detects fraud in Telugu, Hindi and English messages using an on-device ML model. No uploads unless you opt in.",
   "host_permissions": [
     "<all_urls>",
     "https://multilingual-frauddetection.vercel.app/*"
