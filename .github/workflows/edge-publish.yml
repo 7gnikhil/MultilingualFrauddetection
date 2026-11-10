@@ -11,7 +11,7 @@ on:
 env:
   EDGE_PRODUCT_ID: "27da4c2e-16b3-4b6e-bd99-5af1c50ffb59"
   PACKAGE_URL: "https://github.com/7gnikhil/MultilingualFrauddetection/releases/download/extension-v1.3.0/fraud-detector-extension-v1.3.0-store.zip"
-PACKAGE_SHA256: "250b9368c37da10b917d66b224093d1f4fe1d907a392586f4e5afd301d0f67d5"
+  PACKAGE_SHA256: "250b9368c37da10b917d66b224093d1f4fe1d907a392586f4e5afd301d0f67d5"
   API_ROOT: "https://api.addons.microsoftedge.microsoft.com"
 
 jobs:
