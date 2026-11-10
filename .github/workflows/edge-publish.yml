@@ -1,0 +1,83 @@
+name: edge-publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish the draft after a successful package upload"
+        type: boolean
+        default: false
+
+env:
+  EDGE_PRODUCT_ID: "27da4c2e-16b3-4b6e-bd99-5af1c50ffb59"
+  PACKAGE_URL: "https://github.com/7gnikhil/MultilingualFrauddetection/releases/download/extension-v1.3.0/fraud-detector-chrome-extension-v4.zip"
+  PACKAGE_SHA256: "d1c99b78c0253b65a0fcfa46da31bbf191065289a1510445a96591e15b921e18"
+  API_ROOT: "https://api.addons.microsoftedge.microsoft.com"
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download package from the GitHub Release
+        run: |
+          curl -fL -o package.zip "$PACKAGE_URL"
+          echo "$PACKAGE_SHA256  package.zip" | sha256sum -c -
+          ls -la package.zip
+
+      - name: Upload package to the Edge draft submission
+        env:
+          EDGE_CLIENT_ID: ${{ secrets.EDGE_CLIENT_ID }}
+          EDGE_API_KEY: ${{ secrets.EDGE_API_KEY }}
+        run: |
+          set -euo pipefail
+          headers=$(mktemp)
+          http=$(curl -sS -D "$headers" -o response.json -w "%{http_code}" -X POST \
+            -H "Authorization: ApiKey ${EDGE_API_KEY}" \
+            -H "X-ClientID: ${EDGE_CLIENT_ID}" \
+            -H "Content-Type: application/zip" \
+            --data-binary @package.zip \
+            "${API_ROOT}/v1/products/${EDGE_PRODUCT_ID}/submissions/draft/package")
+          echo "Upload HTTP status: $http"
+          echo "--- response headers ---"; cat "$headers"
+          echo "--- response body ---"; cat response.json || true
+          if [ "$http" != "202" ] && [ "$http" != "200" ]; then
+            echo "::error::Package upload was not accepted (HTTP $http)"
+            exit 1
+          fi
+          op=$(grep -i '^location:' "$headers" | tr -d '\r' | awk '{print $2}' | sed 's|.*/||')
+          if [ -z "$op" ]; then op=$(jq -r '.operationId // .id // empty' response.json); fi
+          echo "Operation: $op"
+          if [ -n "$op" ]; then echo "OPERATION_ID=$op" >> "$GITHUB_ENV"; fi
+
+      - name: Poll package operation until it finishes
+        env:
+          EDGE_CLIENT_ID: ${{ secrets.EDGE_CLIENT_ID }}
+          EDGE_API_KEY: ${{ secrets.EDGE_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${OPERATION_ID:-}" ]; then echo "No operation id returned; nothing to poll."; exit 0; fi
+          for i in $(seq 1 40); do
+            curl -sS -o op.json -H "Authorization: ApiKey ${EDGE_API_KEY}" -H "X-ClientID: ${EDGE_CLIENT_ID}" \
+              "${API_ROOT}/v1/products/${EDGE_PRODUCT_ID}/submissions/draft/package/operations/${OPERATION_ID}"
+            status=$(jq -r '.status // "unknown"' op.json)
+            echo "Poll $i: $status"
+            if [ "$status" = "Succeeded" ]; then cat op.json; exit 0; fi
+            if [ "$status" = "Failed" ]; then echo "::error::Package operation failed"; cat op.json; exit 1; fi
+            sleep 15
+          done
+          echo "::error::Timed out waiting for the package operation"
+          exit 1
+
+      - name: Publish the draft (only when requested)
+        if: ${{ inputs.publish }}
+        env:
+          EDGE_CLIENT_ID: ${{ secrets.EDGE_CLIENT_ID }}
+          EDGE_API_KEY: ${{ secrets.EDGE_API_KEY }}
+        run: |
+          set -euo pipefail
+          curl -sS -X POST \
+            -H "Authorization: ApiKey ${EDGE_API_KEY}" \
+            -H "X-ClientID: ${EDGE_CLIENT_ID}" \
+            -H "Content-Type: application/json" \
+            -d '{"notes":"Fraud Detector extension v1.3.0, model v4.0.0. On-device inference; see listing privacy notes."}' \
+            "${API_ROOT}/v1/products/${EDGE_PRODUCT_ID}/submissions"
