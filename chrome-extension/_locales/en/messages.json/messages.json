@@ -1,0 +1,10 @@
+{
+  "extensionName": {
+    "message": "Fraud Detector — Telugu / Hindi / English",
+    "description": "Extension name shown in the browser and the store listing."
+  },
+  "extensionDescription": {
+    "message": "Detects fraud in Telugu, Hindi and English messages using an on-device ML model. No uploads unless you opt in.",
+    "description": "Extension description shown in the browser and the store listing."
+  }
+}
