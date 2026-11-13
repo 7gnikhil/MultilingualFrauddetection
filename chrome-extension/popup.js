@@ -13,6 +13,17 @@ const checkModelBtn = document.getElementById("check-model");
 const applyModelBtn = document.getElementById("apply-model");
 const rollbackModelBtn = document.getElementById("rollback-model");
 
+document.getElementById("launch").addEventListener("click", () => {
+  chrome.tabs.create({ url: chrome.runtime.getURL("tool.html") });
+  window.close();
+});
+
+document.getElementById("open-settings").addEventListener("click", () => {
+  if (chrome.runtime.openOptionsPage) chrome.runtime.openOptionsPage();
+  else chrome.tabs.create({ url: chrome.runtime.getURL("options.html") });
+  window.close();
+});
+
 document.getElementById("toggle").addEventListener("click", async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab && tab.id) {

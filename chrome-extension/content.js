@@ -71,17 +71,20 @@
     "<small>Telugu · Hindi · English — runs on your device</small></div>" +
     "<button class='fd-close' title='Close'>✕</button></div>" +
     "<div class='fd-body'>" +
-      "<div class='fd-drop' id='fd-drop'>Drag a message &amp; drop it here<br>" +
-      "<strong>or select text on the page</strong></div>" +
+      "<div class='fd-drop' id='fd-drop'><div class='fd-drop-icon'>🛡️</div>" +
+      "<div class='fd-drop-title'>Drag a message &amp; drop it here</div>" +
+      "<div class='fd-drop-sub'>or drag it anywhere on the page — the drop zone appears automatically</div>" +
+      "<div class='fd-drop-status' id='fd-drop-status'></div></div>" +
       "<div class='fd-or'>— or paste / type —</div>" +
       "<textarea id='fd-text' placeholder='Paste the suspicious message here…'></textarea>" +
       "<button class='fd-check-btn' id='fd-check'>Check this message</button>" +
       "<div class='fd-result' id='fd-result'></div>" +
-      "<div class='fd-privacy'>🔒 Checks run locally. Corrections are shared only if you explicitly opt in in the popup.</div>" +
+      "<div class='fd-privacy'>🔒 Checks run locally. Corrections are shared only if you explicitly opt in in Settings.<br>A verdict is evidence, not a guarantee — this tool cannot block messages or payments. If money was lost, call <b>1930</b> and report at <b>cybercrime.gov.in</b>.</div>" +
     "</div>";
   document.documentElement.appendChild(panel);
 
   const dropEl = panel.querySelector("#fd-drop");
+  const dropStatus = panel.querySelector("#fd-drop-status");
   const textEl = panel.querySelector("#fd-text");
   const checkBtn = panel.querySelector("#fd-check");
   const resultEl = panel.querySelector("#fd-result");
@@ -100,14 +103,66 @@
     dropEl.addEventListener(ev, (e) => { e.preventDefault(); dropEl.classList.remove("fd-over"); }));
   dropEl.addEventListener("drop", (e) => {
     const dropped = (e.dataTransfer && e.dataTransfer.getData("text/plain")) || "";
-    if (dropped.trim()) { textEl.value = dropped.trim(); runCheck(dropped); }
+    if (dropped.trim()) {
+      textEl.value = dropped.trim();
+      if (dropStatus) dropStatus.textContent = "📩 Message received — checking…";
+      runCheck(dropped);
+    }
   });
   // Also accept a drag anywhere onto the floating button itself
-  btn.addEventListener("dragover", (e) => e.preventDefault());
+  btn.addEventListener("dragenter", (e) => { e.preventDefault(); btn.classList.add("fd-dragging"); });
+  btn.addEventListener("dragover", (e) => { e.preventDefault(); btn.classList.add("fd-dragging"); });
+  btn.addEventListener("dragleave", () => btn.classList.remove("fd-dragging"));
   btn.addEventListener("drop", (e) => {
     e.preventDefault();
+    btn.classList.remove("fd-dragging");
     const dropped = (e.dataTransfer && e.dataTransfer.getData("text/plain")) || "";
     if (dropped.trim()) { togglePanel(true); textEl.value = dropped.trim(); runCheck(dropped); }
+  });
+
+  // ---------- Full-page drop overlay ----------
+  // While the user drags text anywhere on the page, a large drop zone
+  // covers the viewport: "Drop to check this message". Dropping anywhere
+  // (outside the panel/button, which have their own handlers) checks it.
+  const overlay = document.createElement("div");
+  overlay.id = "fd-drop-overlay";
+  overlay.innerHTML = "<div class='fd-overlay-inner'><div class='fd-overlay-icon'>🛡️</div>" +
+    "<div class='fd-overlay-title'>Drop to check this message</div>" +
+    "<div class='fd-overlay-sub'>Fraud Detector will scan it on your device</div></div>";
+  document.documentElement.appendChild(overlay);
+
+  let dragDepth = 0;
+  function dragHasText(e) {
+    const types = (e.dataTransfer && e.dataTransfer.types) || [];
+    return Array.prototype.indexOf.call(types, "text/plain") >= 0;
+  }
+  window.addEventListener("dragenter", (e) => {
+    if (!dragHasText(e)) return;
+    dragDepth++;
+    overlay.classList.add("show");
+    btn.classList.add("fd-dragging");
+  });
+  window.addEventListener("dragover", (e) => {
+    if (dragHasText(e)) e.preventDefault();
+  });
+  window.addEventListener("dragleave", () => {
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (!dragDepth) { overlay.classList.remove("show"); btn.classList.remove("fd-dragging"); }
+  });
+  window.addEventListener("drop", (e) => {
+    const wasShowing = overlay.classList.contains("show");
+    dragDepth = 0;
+    overlay.classList.remove("show");
+    btn.classList.remove("fd-dragging");
+    if (!wasShowing) return;
+    if (panel.contains(e.target) || btn.contains(e.target)) return; // own handlers ran
+    const dropped = (e.dataTransfer && e.dataTransfer.getData("text/plain")) || "";
+    if (dropped.trim()) {
+      e.preventDefault();
+      togglePanel(true);
+      textEl.value = dropped.trim();
+      runCheck(dropped);
+    }
   });
 
   // ---------- Selection bubble ----------

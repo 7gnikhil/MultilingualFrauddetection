@@ -542,12 +542,18 @@ async function rollbackModelUpdate() {
 
 // --- Extension lifecycle ----------------------------------------------------
 
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener((details) => {
   chrome.contextMenus.create({
     id: "fraud-check-selection", title: "Check with Fraud Detector", contexts: ["selection"]
   });
   ensureOffscreen().catch(() => {});
   scheduleFeedbackSync();
+  // First install lands on the launch page: live neural-network pipeline
+  // visualisation, a Launch button for the full-page checker, and a
+  // Settings button for the options page.
+  if (details && details.reason === "install") {
+    chrome.tabs.create({ url: chrome.runtime.getURL("welcome.html") }).catch(() => {});
+  }
 });
 
 chrome.runtime.onStartup.addListener(() => {

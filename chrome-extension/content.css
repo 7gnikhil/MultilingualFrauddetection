@@ -102,3 +102,40 @@
   box-shadow: 0 6px 18px rgba(2,32,71,.35); font-family: system-ui, sans-serif;
 }
 #fd-bubble:hover { background: #1e40af; }
+
+/* --- v1.4.0 drag & drop redesign --- */
+#fd-float-btn { animation: fd-pulse 2.6s ease-in-out infinite; }
+@keyframes fd-pulse {
+  0%, 100% { box-shadow: 0 8px 24px rgba(2,32,71,.35), 0 0 0 0 rgba(14,165,233,.45); }
+  50% { box-shadow: 0 8px 24px rgba(2,32,71,.35), 0 0 0 10px rgba(14,165,233,0); }
+}
+#fd-float-btn.fd-dragging {
+  animation: none; transform: scale(1.22);
+  box-shadow: 0 0 0 6px rgba(34,197,94,.45), 0 14px 34px rgba(2,32,71,.5);
+  background: linear-gradient(135deg, #15803d, #22c55e);
+}
+.fd-drop {
+  border: 2px dashed #38bdf8; border-radius: 14px; padding: 16px 12px;
+  text-align: center; color: #334155;
+  background: linear-gradient(180deg, #eff6ff, #dbeafe);
+}
+.fd-drop-icon { font-size: 28px; line-height: 1; margin-bottom: 5px; }
+.fd-drop-title { font-weight: 700; color: #1e3a8a; font-size: 14px; }
+.fd-drop-sub { font-size: 11.5px; color: #64748b; margin-top: 3px; line-height: 1.45; }
+.fd-drop-status { font-size: 12px; color: #0f766e; font-weight: 600; min-height: 0; margin-top: 5px; }
+.fd-drop.fd-over {
+  border-color: #15803d; background: linear-gradient(180deg, #f0fdf4, #dcfce7);
+  transform: scale(1.02); box-shadow: 0 0 0 4px rgba(34,197,94,.22);
+}
+#fd-drop-overlay {
+  position: fixed; inset: 14px; z-index: 2147483645; display: none;
+  border: 3px dashed #38bdf8; border-radius: 24px;
+  background: rgba(7, 13, 26, .88); pointer-events: none;
+  align-items: center; justify-content: center; text-align: center;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+#fd-drop-overlay.show { display: flex; }
+.fd-overlay-icon { font-size: 54px; animation: fd-bob 1s ease-in-out infinite; }
+@keyframes fd-bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+.fd-overlay-title { color: #e0f2fe; font-size: 24px; font-weight: 800; margin-top: 8px; }
+.fd-overlay-sub { color: #94a3b8; font-size: 13.5px; margin-top: 4px; }

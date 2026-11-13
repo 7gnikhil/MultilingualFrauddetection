@@ -44,6 +44,18 @@ in transit and at rest, and set a retention policy.
 
 ---
 
+## Limitations — what this tool cannot do
+
+- **It classifies; it cannot block.** It cannot stop a message, call or payment, freeze money, or file a report for you. If money was lost, call **1930**, report at **cybercrime.gov.in** and inform your bank immediately.
+- **A verdict is evidence, not a guarantee.** "LOOKS SAFE" is not proof a message is safe, and "FRAUD" is not proof of a crime. On a 64-message genuinely-unseen challenge set the v4 model scored ~0.81 accuracy; genuine bank-alert-style messages, especially in Telugu and Hindi, are its weakest class. Verify alerts on your bank's official number.
+- **Text only.** It reads text you paste, select or drag. It cannot scan an SMS inbox, WhatsApp, calls, screenshots, QR codes, voice notes, or the destination of a link.
+- **Three languages only.** Telugu, Hindi and English (including Hinglish and Romanized Telugu). Other languages and scripts are not supported.
+- **New scams can slip through.** Unseen fraud patterns may score low until corrections retrain the model. Scores inside the uncertainty band around the threshold are shown as UNCERTAIN instead of a forced verdict.
+- **Training data is thin for Hindi and Telugu.** Real messages — genuine (ham) ones above all — are scarce, so field accuracy will differ from grouped-CV test figures. Published metrics always name their test basis.
+- **Desktop Chromium only; first check is slow.** The ~239 MB encoder loads on-device; the first verdict can take ~30 seconds.
+- **Not a government body. Not legal advice.** An independent student-built tool; official routes are 1930 and cybercrime.gov.in.
+- **Sharing is opt-in.** Corrections stay on-device unless sharing is turned ON in Settings; then only anonymized text is queued. Anonymization can miss unusual formats.
+
 ## Using the extension
 
 1. **It stays on screen.** After install, a round 🛡️ button appears at
