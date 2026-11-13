@@ -21,7 +21,7 @@ env:
 
 jobs:
   python-quality:
-    name: Python lint + unit tests (ml/)
+    name: Python lint + unit tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -40,12 +40,18 @@ jobs:
           if [ -f ml/requirements.txt ]; then pip install -r ml/requirements.txt; fi
 
       - name: Byte-compile all Python sources
-        run: python -m compileall -q ml backend
+        run: |
+                  for d in ml backend api; do
+                              if [ -d "$d" ]; then python -m compileall -q "$d"; fi
+                                        done
 
       - name: Lint (fatal errors block; style is advisory)
         run: |
-          ruff check --select E9,F63,F7,F82 ml backend
-          ruff check ml backend || true
+                    DIRS=""
+                              for d in ml backend api; do [ -d "$d" ] && DIRS="$DIRS $d"; done
+                                        echo "Linting:$DIRS"
+                                                  ruff check --select E9,F63,F7,F82 $DIRS
+                                                            ruff check $DIRS || true
 
       - name: Unit tests (ml/)
         if: ${{ hashFiles('ml/tests/**') != '' }}
