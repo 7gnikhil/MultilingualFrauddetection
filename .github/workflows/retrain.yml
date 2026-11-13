@@ -48,8 +48,32 @@ env:
   FEEDBACK_REPO: ${{ vars.FEEDBACK_REPO }}
 
 jobs:
+  preflight:
+    name: Check retrain pipeline is provisioned
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check required pipeline pieces exist
+        id: check
+        run: |
+          MISSING=""
+          [ -d ml ] || MISSING="$MISSING ml/"
+          [ -f ml/configs/challenger.yaml ] || MISSING="$MISSING ml/configs/challenger.yaml"
+          [ -f models/champion/config.json ] || MISSING="$MISSING models/champion/config.json"
+          [ -f data/raw/sheet_export.csv ] || MISSING="$MISSING data/raw/sheet_export.csv"
+          if [ -n "$MISSING" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Retrain pipeline not provisioned yet (missing:$MISSING). No-op run - champion unchanged."
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
   retrain:
     name: Merge feedback, train challenger, evaluate gates
+    needs: preflight
+    if: ${{ needs.preflight.outputs.ready == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 180
     outputs:
