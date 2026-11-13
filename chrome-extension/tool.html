@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fraud Detector — Checker</title>
+<link rel="stylesheet" href="tool.css">
+</head>
+<body>
+  <div class="bg-glow"></div>
+  <main class="wrap">
+    <header class="topbar">
+      <div class="brand"><span class="logo">🛡️</span>
+        <div><b>Fraud Detector</b><small>Full-page checker · Telugu · Hindi · English · on-device</small></div>
+      </div>
+      <div class="actions">
+        <button id="open-welcome" class="btn ghost">🏠 Launch page</button>
+        <button id="open-settings" class="btn ghost">⚙️ Settings</button>
+      </div>
+    </header>
+
+    <canvas id="nn"></canvas>
+
+    <section class="card">
+      <div id="drop" class="drop">
+        <div class="drop-icon">🛡️</div>
+        <div><b>Drag a message &amp; drop it here</b><br>
+        <span>…or paste / type it below. Dropping text anywhere on this page works too.</span></div>
+      </div>
+      <textarea id="text" placeholder="Paste the suspicious message here…"></textarea>
+      <button id="check" class="btn primary">Check this message</button>
+      <div id="result" class="result"></div>
+      <p class="privacy">🔒 Checks run locally on your device. Corrections are shared only if you
+        explicitly opt in under Settings.</p>
+      <p class="privacy">⚠️ A verdict is evidence, not a guarantee — this tool classifies text and
+        cannot block messages or payments, and it only reads text you give it (Telugu · Hindi ·
+        English). If money was lost, call <b>1930</b> and report at <b>cybercrime.gov.in</b>.
+        Full limitations are listed on the Launch page.</p>
+    </section>
+  </main>
+  <div id="page-drop" class="page-drop"><div>🛡️<br>Drop to check this message</div></div>
+  <script src="anonymize.js"></script>
+  <script src="features.js"></script>
+  <script src="langdetect.js"></script>
+  <script src="model.js"></script>
+  <script src="nn.js"></script>
+  <script src="tool.js"></script>
+</body>
+</html>

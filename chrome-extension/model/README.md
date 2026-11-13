@@ -7,7 +7,8 @@ pipeline as `training_v3/train.py`, exported for the browser:
 |---|---|
 | `model.onnx` | MuRIL encoder (`google/muril-base-cased`), dynamic-int8 quantized ONNX, outputs `last_hidden_state` |
 | `vocab.json` | Token → id map dumped from the training tokenizer itself (transformers `get_vocab()`), so JS tokenization matches training exactly |
-| `config.json` | Per-language shipped heads (all `own_struct`: embeddings + structured features), fitted on the INT8 encoder's own embeddings — standardiser mean/scale, logistic-regression coefficients + intercept, and the tuned decision threshold per language |
+| `config_v4.json` | v4 stacked model per language: arm B (`own_struct` head on the INT8 encoder's embeddings — standardiser mean/scale, LR coefficients + intercept) + arm A (sparse hashed lexical LR coefficients) + 3-parameter meta stack + tuned decision threshold |
+| `config_v3_backup.json` | The previous v3 single-head config, kept for reference/rollback |
 | `ort.min.js` + `ort-wasm-simd-threaded.wasm` / `.mjs` | ONNX Runtime Web 1.20.1 (CPU/WASM) |
 
 How a check flows (all inside `offscreen.js`, an extension page where
@@ -21,7 +22,7 @@ vs the language's tuned threshold.
 
 Verified before shipping: the JS cleaning, structured features and
 tokenizer produce byte-identical results to the Python training
-pipeline on 108 sample messages. The heads in `config.json` were
+pipeline on 108 sample messages. The heads in `config_v4.json` were
 fitted on embeddings produced by THIS int8 encoder (not the FP32 one):
 pooled MuRIL embeddings have tiny per-dimension variance, so the
 standardiser amplifies raw FP32→int8 drift (~0.99 cosine) into flipped

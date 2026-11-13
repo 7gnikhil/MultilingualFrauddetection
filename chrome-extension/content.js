@@ -8,7 +8,10 @@
  *  4. Selecting/highlighting text anywhere on the page pops a small
  *     "🛡️ Check" bubble next to the selection.
  *  5. Right-click → "Check with Fraud Detector" does the same.
- * Everything runs locally: anonymize -> detect language -> model -> verdict.
+ * Inference runs locally: anonymize -> detect language -> model ->
+ * verdict. Corrections also adapt the model locally. An anonymized
+ * correction is queued for upload only when the user has explicitly
+ * opted in in the popup and then clicked a correction button.
  */
 (function () {
   "use strict";
@@ -68,17 +71,20 @@
     "<small>Telugu · Hindi · English — runs on your device</small></div>" +
     "<button class='fd-close' title='Close'>✕</button></div>" +
     "<div class='fd-body'>" +
-      "<div class='fd-drop' id='fd-drop'>Drag a message &amp; drop it here<br>" +
-      "<strong>or select text on the page</strong></div>" +
+      "<div class='fd-drop' id='fd-drop'><div class='fd-drop-icon'>🛡️</div>" +
+      "<div class='fd-drop-title'>Drag a message &amp; drop it here</div>" +
+      "<div class='fd-drop-sub'>or drag it anywhere on the page — the drop zone appears automatically</div>" +
+      "<div class='fd-drop-status' id='fd-drop-status'></div></div>" +
       "<div class='fd-or'>— or paste / type —</div>" +
       "<textarea id='fd-text' placeholder='Paste the suspicious message here…'></textarea>" +
       "<button class='fd-check-btn' id='fd-check'>Check this message</button>" +
       "<div class='fd-result' id='fd-result'></div>" +
-      "<div class='fd-privacy'>🔒 Checked locally in your browser. Nothing is sent anywhere.</div>" +
+      "<div class='fd-privacy'>🔒 Checks run locally. Corrections are shared only if you explicitly opt in in Settings.<br>A verdict is evidence, not a guarantee — this tool cannot block messages or payments. If money was lost, call <b>1930</b> and report at <b>cybercrime.gov.in</b>.</div>" +
     "</div>";
   document.documentElement.appendChild(panel);
 
   const dropEl = panel.querySelector("#fd-drop");
+  const dropStatus = panel.querySelector("#fd-drop-status");
   const textEl = panel.querySelector("#fd-text");
   const checkBtn = panel.querySelector("#fd-check");
   const resultEl = panel.querySelector("#fd-result");
@@ -97,14 +103,66 @@
     dropEl.addEventListener(ev, (e) => { e.preventDefault(); dropEl.classList.remove("fd-over"); }));
   dropEl.addEventListener("drop", (e) => {
     const dropped = (e.dataTransfer && e.dataTransfer.getData("text/plain")) || "";
-    if (dropped.trim()) { textEl.value = dropped.trim(); runCheck(dropped); }
+    if (dropped.trim()) {
+      textEl.value = dropped.trim();
+      if (dropStatus) dropStatus.textContent = "📩 Message received — checking…";
+      runCheck(dropped);
+    }
   });
   // Also accept a drag anywhere onto the floating button itself
-  btn.addEventListener("dragover", (e) => e.preventDefault());
+  btn.addEventListener("dragenter", (e) => { e.preventDefault(); btn.classList.add("fd-dragging"); });
+  btn.addEventListener("dragover", (e) => { e.preventDefault(); btn.classList.add("fd-dragging"); });
+  btn.addEventListener("dragleave", () => btn.classList.remove("fd-dragging"));
   btn.addEventListener("drop", (e) => {
     e.preventDefault();
+    btn.classList.remove("fd-dragging");
     const dropped = (e.dataTransfer && e.dataTransfer.getData("text/plain")) || "";
     if (dropped.trim()) { togglePanel(true); textEl.value = dropped.trim(); runCheck(dropped); }
+  });
+
+  // ---------- Full-page drop overlay ----------
+  // While the user drags text anywhere on the page, a large drop zone
+  // covers the viewport: "Drop to check this message". Dropping anywhere
+  // (outside the panel/button, which have their own handlers) checks it.
+  const overlay = document.createElement("div");
+  overlay.id = "fd-drop-overlay";
+  overlay.innerHTML = "<div class='fd-overlay-inner'><div class='fd-overlay-icon'>🛡️</div>" +
+    "<div class='fd-overlay-title'>Drop to check this message</div>" +
+    "<div class='fd-overlay-sub'>Fraud Detector will scan it on your device</div></div>";
+  document.documentElement.appendChild(overlay);
+
+  let dragDepth = 0;
+  function dragHasText(e) {
+    const types = (e.dataTransfer && e.dataTransfer.types) || [];
+    return Array.prototype.indexOf.call(types, "text/plain") >= 0;
+  }
+  window.addEventListener("dragenter", (e) => {
+    if (!dragHasText(e)) return;
+    dragDepth++;
+    overlay.classList.add("show");
+    btn.classList.add("fd-dragging");
+  });
+  window.addEventListener("dragover", (e) => {
+    if (dragHasText(e)) e.preventDefault();
+  });
+  window.addEventListener("dragleave", () => {
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (!dragDepth) { overlay.classList.remove("show"); btn.classList.remove("fd-dragging"); }
+  });
+  window.addEventListener("drop", (e) => {
+    const wasShowing = overlay.classList.contains("show");
+    dragDepth = 0;
+    overlay.classList.remove("show");
+    btn.classList.remove("fd-dragging");
+    if (!wasShowing) return;
+    if (panel.contains(e.target) || btn.contains(e.target)) return; // own handlers ran
+    const dropped = (e.dataTransfer && e.dataTransfer.getData("text/plain")) || "";
+    if (dropped.trim()) {
+      e.preventDefault();
+      togglePanel(true);
+      textEl.value = dropped.trim();
+      runCheck(dropped);
+    }
   });
 
   // ---------- Selection bubble ----------
@@ -140,10 +198,83 @@
 
   // ---------- Check flow: anonymize -> language -> model -> verdict ----------
   const VERDICTS = {
-    fraud:  { icon: "🚨", text: "FRAUD" },
-    likely: { icon: "⚠️", text: "LIKELY FRAUD — be careful" },
-    safe:   { icon: "✅", text: "LOOKS SAFE" }
+    fraud:     { icon: "🚨", text: "FRAUD" },
+    uncertain: { icon: "❓", text: "UNCERTAIN — NEEDS REVIEW" },
+    safe:      { icon: "✅", text: "LOOKS SAFE" }
   };
+
+  let lastCheck = null; // { text, lang, result } of the verdict on screen
+
+  function renderResult(res, lang) {
+    const v = VERDICTS[res.label] || VERDICTS.uncertain;
+    const pct = Math.round(res.confidence * 100);
+    const probabilityPct = typeof res.probability === "number"
+      ? Math.round(res.probability * 100) : null;
+    const thresholdPct = typeof res.threshold === "number"
+      ? Math.round(res.threshold * 100) : null;
+    const marginPct = Math.round((res.uncertaintyMargin || 0.08) * 100);
+    resultEl.className = "fd-result show " + res.label;
+    resultEl.innerHTML =
+      "<div class='fd-verdict'>" + v.icon + " " + v.text + "</div>" +
+      "<div class='fd-bar'><div style='width:" + pct + "%'></div></div>" +
+      "<div class='fd-meta'>Confidence: <b>" + pct + "%</b> · Language: <b>" +
+      lang.label + "</b></div>" +
+      (probabilityPct !== null && thresholdPct !== null
+        ? "<div class='fd-meta'>Model fraud probability: <b>" + probabilityPct +
+          "%</b> · Decision threshold: <b>" + thresholdPct + "%</b></div>" : "") +
+      (res.label === "uncertain"
+        ? "<div class='fd-reasons'>This score is within ±" + marginPct +
+          " points of the threshold, so the model is not confident enough " +
+          "for a SAFE/FRAUD verdict. Review the message manually.</div>" : "") +
+      (res.reasons && res.reasons.length
+        ? "<div class='fd-reasons'>Signals: " +
+          res.reasons.map((r) => "“" + r + "”").join(", ") + "</div>" : "") +
+      "<div class='fd-feedback'><span>Wrong verdict? Teach it:</span>" +
+      "<button class='fd-fb-btn' data-label='1'>🚨 It's fraud</button>" +
+      "<button class='fd-fb-btn' data-label='0'>✅ It's safe</button></div>" +
+      "<div class='fd-learn-note' id='fd-learn-note'></div>";
+    resultEl.querySelectorAll(".fd-fb-btn").forEach((b) =>
+      b.addEventListener("click", () => onFeedback(parseInt(b.dataset.label, 10))));
+    if (res.corrections) {
+      const note = resultEl.querySelector("#fd-learn-note");
+      if (note) note.textContent = "🧠 Personal corrections active: " + res.corrections;
+    }
+  }
+
+  async function onFeedback(label) {
+    if (!lastCheck) return;
+    const note = resultEl.querySelector("#fd-learn-note");
+    resultEl.querySelectorAll(".fd-fb-btn").forEach((b) => (b.disabled = true));
+    if (note) note.textContent = "🧠 Learning…";
+    try {
+      const out = await window.FraudModel.learn(
+        lastCheck.text, lastCheck.lang, label, lastCheck.result);
+      const lbl = window.FraudModel.verdictFrom(
+        out.probability, out.threshold, out.uncertaintyMargin);
+      const updated = {
+        label: lbl,
+        probability: out.probability,
+        confidence: lbl === "safe" ? 1 - out.probability : out.probability,
+        threshold: out.threshold,
+        uncertaintyMargin: out.uncertaintyMargin || 0.08,
+        modelVersion: out.modelVersion || (lastCheck.result && lastCheck.result.modelVersion),
+        demo: false,
+        reasons: [],
+        corrections: out.corrections
+      };
+      lastCheck.result = updated;
+      renderResult(updated, lastCheck.lang);
+      const n2 = resultEl.querySelector("#fd-learn-note");
+      if (n2) n2.textContent = "🧠 Learned — the local model updated instantly. " +
+        "Personal corrections so far: " + out.corrections +
+        (out.sharedQueued
+          ? " · An anonymized copy was queued for model improvement because sharing is ON."
+          : "");
+    } catch (err) {
+      if (note) note.textContent = "Could not learn: " + (err && err.message ? err.message : "error");
+      resultEl.querySelectorAll(".fd-fb-btn").forEach((b) => (b.disabled = false));
+    }
+  }
 
   async function runCheck(raw) {
     const text = (raw || textEl.value || "").trim();
@@ -152,25 +283,20 @@
     try {
       const lang = window.FraudDetectLanguage(text);
       const res = await window.FraudModel.predict(text, lang);
-      const v = VERDICTS[res.label] || VERDICTS.safe;
-      const pct = Math.round(res.confidence * 100);
-      resultEl.className = "fd-result show " + res.label;
-      resultEl.innerHTML =
-        "<div class='fd-verdict'>" + v.icon + " " + v.text +
-        (res.demo ? "<span class='fd-demo-badge'>DEMO MODEL</span>" : "") + "</div>" +
-        "<div class='fd-bar'><div style='width:" + pct + "%'></div></div>" +
-        "<div class='fd-meta'>Confidence: <b>" + pct + "%</b> · Language: <b>" +
-        lang.label + "</b></div>" +
-        (res.reasons && res.reasons.length
-          ? "<div class='fd-reasons'>Signals: " +
-            res.reasons.map((r) => "“" + r + "”").join(", ") + "</div>" : "") +
-        (res.demo
-          ? "<div class='fd-reasons'>Keyword demo only — the trained on-device model could not be reached" +
-            (res.fallbackError ? " (" + res.fallbackError + ")" : "") + ".</div>" : "");
+      lastCheck = { text, lang, result: res };
+      try {
+        const st = await window.FraudModel.learningState();
+        if (st && st.corrections) res.corrections = st.corrections;
+      } catch (e) { /* count is cosmetic */ }
+      renderResult(res, lang);
     } catch (err) {
-      resultEl.className = "fd-result show likely";
-      resultEl.innerHTML = "<div class='fd-verdict'>⚠️ Could not check</div>" +
-        "<div class='fd-meta'>" + (err && err.message ? err.message : "Unknown error") + "</div>";
+      lastCheck = null;
+      const detail = (err && err.message ? err.message : "Unknown error")
+        .replace(/^MODEL UNAVAILABLE:\s*/i, "");
+      resultEl.className = "fd-result show unavailable";
+      resultEl.innerHTML = "<div class='fd-verdict'>⛔ MODEL UNAVAILABLE</div>" +
+        "<div class='fd-meta'>The trained model could not produce a verdict, " +
+        "so no SAFE/FRAUD result is shown. " + detail + "</div>";
     } finally {
       checkBtn.disabled = false; checkBtn.textContent = "Check this message";
     }
@@ -195,7 +321,8 @@
         "<div class='fd-verdict'>👋 Keep Fraud Detector on screen?</div>" +
         "<div class='fd-meta'>The 🛡️ button stays visible on every page so you can " +
         "click it, drag messages onto it, or select any text to check it. " +
-        "You can drag the button anywhere. Nothing leaves your browser.</div>";
+        "You can drag the button anywhere. Checks stay on your device; " +
+        "corrections are shared only if you explicitly opt in.</div>";
       localStorage.setItem(ASK_KEY, "1");
     }
   } catch (e) { /* storage unavailable on some pages */ }

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fraud Detector — Welcome</title>
+<link rel="stylesheet" href="welcome.css">
+</head>
+<body>
+  <div class="bg-glow"></div>
+  <main class="wrap">
+    <header class="hero">
+      <div class="logo">🛡️</div>
+      <h1>Fraud Detector is installed</h1>
+      <p class="sub">A real on-device neural model that checks messages in
+        <b>Telugu · Hindi · English</b> — nothing leaves your device unless you
+        explicitly opt in to sharing a correction.</p>
+      <div class="cta-row">
+        <button id="launch" class="btn primary">🚀 Launch Fraud Detector</button>
+        <button id="open-settings" class="btn ghost">⚙️ Settings</button>
+      </div>
+      <p class="hint">Launch opens the full-page checker. Settings opens learning,
+        sharing and model-update controls.</p>
+    </header>
+
+    <section class="card nn-card">
+      <div class="card-head">
+        <h2>Watch it think</h2>
+        <span class="live-dot"><span></span>LIVE PIPELINE</span>
+      </div>
+      <canvas id="nn"></canvas>
+      <div class="stage-line" id="stage-line">The network below is the real pipeline:
+        tokens → anonymize → language → MuRIL embedding + lexical features → classifier → verdict.</div>
+      <div class="demo">
+        <textarea id="demo-text" rows="3">Congratulations! You have won a cash prize of Rs 50,000. Click the link and share your OTP to claim it now.</textarea>
+        <div class="demo-row">
+          <button class="chip" data-sample="fraud">Try a scam message</button>
+          <button class="chip" data-sample="safe">Try a genuine alert</button>
+          <button id="run-scan" class="btn primary small">▶ Run live scan</button>
+        </div>
+        <div class="demo-result" id="demo-result"></div>
+      </div>
+    </section>
+
+    <section class="grid">
+      <div class="card step">
+        <div class="step-icon">🖱️</div>
+        <h3>1 · Drag &amp; drop</h3>
+        <p>Drag any suspicious message onto the floating 🛡️ button — or drop it
+          anywhere on the page while dragging and the checker opens itself.</p>
+      </div>
+      <div class="card step">
+        <div class="step-icon">✍️</div>
+        <h3>2 · Select or right-click</h3>
+        <p>Highlight text on any page and tap <b>“Check if fraud”</b>, or right-click
+          the selection → <b>“Check with Fraud Detector”</b>.</p>
+      </div>
+      <div class="card step">
+        <div class="step-icon">🧠</div>
+        <h3>3 · Teach it</h3>
+        <p>Wrong verdict? Tap <b>“It's fraud”</b> / <b>“It's safe”</b> in the result —
+          the model adjusts on your device instantly.</p>
+      </div>
+    </section>
+
+    <section class="card limitations">
+      <h2>⚠️ Honest limitations — what this tool cannot do</h2>
+      <ul>
+        <li><b>It classifies; it cannot block.</b> It cannot stop a message, call or payment, freeze money, or file a report for you. If money was lost, call <b>1930</b>, report at <b>cybercrime.gov.in</b> and inform your bank immediately.</li>
+        <li><b>A verdict is evidence, not a guarantee.</b> “LOOKS SAFE” is not proof a message is safe, and “FRAUD” is not proof of a crime. On 64 genuinely unseen test messages the model got about 4 in 5 right — genuine bank-alert-style messages, especially in Telugu and Hindi, are its weakest spot. Verify alerts on your bank's official number.</li>
+        <li><b>Text only.</b> It reads text you paste, select or drag. It cannot scan your SMS inbox, WhatsApp, calls, screenshots, QR codes, voice notes, or the page a link leads to.</li>
+        <li><b>Three languages only.</b> Telugu, Hindi and English (including Hinglish and Romanized Telugu). Other languages and scripts are not supported yet.</li>
+        <li><b>New scams can slip through.</b> Fraud patterns change daily; a pattern the model has never seen may score low until corrections retrain it. Scores near the threshold are shown as <b>UNCERTAIN</b> instead of a forced answer.</li>
+        <li><b>Training data is thinner than we want.</b> Real Hindi and Telugu messages — genuine ones above all — are scarce in the training set, so real-world accuracy will differ from test numbers. Every figure we publish names its test basis.</li>
+        <li><b>Desktop Chromium only, and the first check is slow.</b> The 239&nbsp;MB model runs on your device; the first verdict can take ~30 seconds. It does not run inside mobile apps.</li>
+        <li><b>Not a government body. Not legal advice.</b> Fraud Detector is an independent, student-built tool. The official routes are the 1930 helpline and cybercrime.gov.in.</li>
+        <li><b>Sharing is your choice — know what it sends.</b> Corrections stay on your device unless you turn sharing ON in Settings; then only anonymized text (numbers, links and OTPs replaced by placeholders) is queued. Anonymization can miss unusual formats, so don't correct messages containing details you would not want shared anonymized.</li>
+      </ul>
+    </section>
+
+    <footer>
+      <span>Model v4.0.0 · Extension v1.4.0 · Runs 100% on-device</span>
+      <a href="https://github.com/7gnikhil/MultilingualFrauddetection" target="_blank" rel="noopener">GitHub — Multilingual Fraud Detection</a>
+    </footer>
+  </main>
+  <script src="anonymize.js"></script>
+  <script src="features.js"></script>
+  <script src="langdetect.js"></script>
+  <script src="model.js"></script>
+  <script src="nn.js"></script>
+  <script src="welcome.js"></script>
+</body>
+</html>

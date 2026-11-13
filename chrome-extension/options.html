@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fraud Detector — Settings</title>
+<link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main class="wrap">
+    <header class="topbar">
+      <div class="brand"><span class="logo">🛡️</span>
+        <div><b>Fraud Detector — Settings</b>
+        <small>Learning · sharing · model updates · v1.4.0</small></div>
+      </div>
+      <div class="actions">
+        <button id="launch" class="btn primary">🚀 Launch Fraud Detector</button>
+        <button id="open-welcome" class="btn ghost">🏠 Launch page</button>
+      </div>
+    </header>
+
+    <section class="card">
+      <h2>🧠 Personal learning</h2>
+      <p>Verdict wrong? In the checker panel, tap <b>“It's fraud”</b> or <b>“It's safe”</b> —
+        the local model adjusts instantly, on this device only.
+        Corrections so far: <b id="learn-count">…</b></p>
+      <div class="row">
+        <button id="export" class="btn secondary">Export corrections (CSV)</button>
+        <button id="reset" class="btn danger">Reset learning</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>🌐 Improve the shared model (optional)</h2>
+      <label class="consent" for="share-corrections">
+        <input type="checkbox" id="share-corrections">
+        <span>Share anonymized corrections to improve the model</span>
+      </label>
+      <p><b>Default: OFF.</b> Nothing is uploaded unless this is ON <i>and</i> you click a
+        correction button. Before upload, the same anonymizer used by the model replaces URLs,
+        emails, UPI IDs, account numbers, phone numbers and OTP-like digits with placeholders.
+        Raw messages are never queued or sent.</p>
+      <label class="muted" for="api-base">Feedback / model-update API base URL</label>
+      <input type="url" id="api-base" spellcheck="false"
+             value="https://multilingual-frauddetection.vercel.app">
+      <div class="row">
+        <button id="save-api" class="btn secondary">Save API settings</button>
+        <button id="sync-now" class="btn secondary">Sync now</button>
+      </div>
+      <p>Queued anonymized corrections: <b id="queue-count">0</b>.
+        Failed uploads stay queued and retry with backoff.</p>
+      <div class="status" id="settings-status"></div>
+    </section>
+
+    <section class="card">
+      <h2>⬆️ Model config updates</h2>
+      <p>Active config: <b id="model-version">…</b><br>
+        <span id="model-status">Not checked yet.</span></p>
+      <div class="row">
+        <button id="check-model" class="btn secondary">Check for updates</button>
+        <button id="apply-model" class="btn secondary" disabled>Apply staged</button>
+        <button id="rollback-model" class="btn danger" disabled>Rollback</button>
+      </div>
+      <p class="muted">Updates download and validate a small config.json only. The 239&nbsp;MB ONNX
+        encoder is never replaced automatically, and the previous config is kept for rollback.</p>
+    </section>
+
+    <section class="card">
+      <h2>⚠️ Limitations</h2>
+      <p class="muted">A verdict is evidence, not a guarantee. This tool classifies text and cannot
+        block messages or payments; it reads only the text you give it, in Telugu, Hindi or English.
+        If money was lost, call <b>1930</b> and report at <b>cybercrime.gov.in</b>. The full
+        limitations list is on the Launch page.</p>
+      <p class="muted">🔒 Local inference · sharing is opt-in and anonymized.</p>
+    </section>
+  </main>
+  <script src="options.js"></script>
+</body>
+</html>
